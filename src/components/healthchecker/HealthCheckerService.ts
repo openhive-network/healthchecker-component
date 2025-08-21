@@ -172,6 +172,7 @@ class HealthCheckerService extends EventTarget {
       this.switchStatus = "waiting";
       this.registerCalls();
       this.emit(`stateChange-${this.serviceKey}`, this.getComponentData());
+      this.stopCheckingProcess();
     }
   }
 
