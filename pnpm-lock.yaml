@@ -7,8 +7,8 @@ settings:
 catalogs:
   hiveio-toolset:
     '@hiveio/wax':
-      specifier: 1.27.6-rc10-stable.250718075612
-      version: 1.27.6-rc10-stable.250718075612
+      specifier: 1.27.11-rc0
+      version: 1.27.11-rc0
 
 importers:
 
@@ -16,7 +16,7 @@ importers:
     dependencies:
       '@hiveio/wax':
         specifier: catalog:hiveio-toolset
-        version: 1.27.6-rc10-stable.250718075612
+        version: 1.27.11-rc0
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -487,8 +487,8 @@ packages:
     resolution: {integrity: sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@hiveio/wax@1.27.6-rc10-stable.250718075612':
-    resolution: {integrity: sha1-TYKUMQ158pF6HL+KoE1ze7dYQ/M=, tarball: https://gitlab.syncad.com/api/v4/projects/419/packages/npm/@hiveio/wax/-/@hiveio/wax-1.27.6-rc10-stable.250718075612.tgz}
+  '@hiveio/wax@1.27.11-rc0':
+    resolution: {integrity: sha1-xD2WXqzjd+bOrtaFHWwiGmj+wss=, tarball: https://gitlab.syncad.com/api/v4/projects/419/packages/npm/@hiveio/wax/-/@hiveio/wax-1.27.11-rc0.tgz}
     engines: {node: ^20.11 || >= 21.2}
 
   '@humanwhocodes/config-array@0.13.0':
@@ -1665,9 +1665,6 @@ packages:
   lodash@4.17.21:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
 
-  long@5.3.1:
-    resolution: {integrity: sha512-ka87Jz3gcx/I7Hal94xaN2tZEOPoUOEVftkQqZx2EeQRN7LGdfLlI3FvZ+7WDplm+vK2Urx9ULrvSowtdCieng==}
-
   loose-envify@1.4.0:
     resolution: {integrity: sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==}
     hasBin: true
@@ -2608,10 +2605,9 @@ snapshots:
 
   '@eslint/js@8.57.1': {}
 
-  '@hiveio/wax@1.27.6-rc10-stable.250718075612':
+  '@hiveio/wax@1.27.11-rc0':
     dependencies:
       events: 3.3.0
-      long: 5.3.1
 
   '@humanwhocodes/config-array@0.13.0':
     dependencies:
@@ -3853,8 +3849,6 @@ snapshots:
   lodash.merge@4.6.2: {}
 
   lodash@4.17.21: {}
-
-  long@5.3.1: {}
 
   loose-envify@1.4.0:
     dependencies:

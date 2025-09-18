@@ -79,7 +79,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
           </div>
           <div className={"flex flex-wrap items-center gap-2 py-2 pl-4"}>
             {disabled ? (
-              <div>API failed</div>
+              <div>No connection. Network or CORS error</div>
             ) : (
               checkerNamesList.map((checkerName) => (
                 <Badge
