@@ -1,4 +1,4 @@
-import { HealthChecker, TScoredEndpoint, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax/vite";
+import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax/vite";
 
 export interface ApiChecker {
   title: string;
@@ -119,15 +119,24 @@ class HealthCheckerService extends EventTarget {
     this.emit(`stateChange-${this.serviceKey}`, this.getComponentData());
   }
 
-  markValidationError = (endpointId: number, providerName: string, error: WaxHealthCheckerValidatorFailedError<string>) => {
+  handleHealthCheckerError = (error: WaxHealthCheckerError): void => {
+    if (this.enableLogs) console.error(error);
+    const endpointId = error.apiEndpoint.id;
+    const provider = error.apiUrl || "";
+    this.markValidationError(endpointId, provider, error)
+  }
+
+  markValidationError = (endpointId: number, providerName: string, error: WaxHealthCheckerValidatorFailedError<string> | WaxHealthCheckerError) => {
     const checkTitle = this.endpointTitleById.get(endpointId);
+    let params: string | object | undefined = undefined;
+    if ("request" in error) params = error.request.data;
     if (checkTitle) {
       const checkObject: ValidationErrorDetails = {
         checkName: checkTitle,
         providerName: providerName,
         message: error.message,
         paths: error.apiEndpoint.paths,
-        params: error.request.data,
+        params: params
       }
       const prevoiusFailedChecks = [...this.failedChecksByProvider.get(providerName) || [], checkObject];
       const newFailedChecks = structuredClone(this.failedChecksByProvider).set(providerName, prevoiusFailedChecks);
@@ -156,7 +165,7 @@ class HealthCheckerService extends EventTarget {
    * Part of HC necessary initialization. Set event listeners and default endpoints.
    */
   initializeHealthChecker = async () => {
-    this.healthChecker?.on('error', error => {if(this.enableLogs) console.error(error.message)});
+    this.healthChecker?.on('error', error => {this.handleHealthCheckerError(error)});
     this.healthChecker?.on("data", this.updateAppAfterScoredEndpointsChange);
     this.healthChecker?.on("validationerror", error => this.markValidationError(error.apiEndpoint.id, error.request.endpoint, error));
     const initialEndpoints: TScoredEndpoint[] | undefined = this.providers?.map(
