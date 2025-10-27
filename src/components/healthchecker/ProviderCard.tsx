@@ -2,7 +2,7 @@ import { cn } from "./utils.ts";
 import { Button } from "./shad/button";
 import { Card } from "./shad/card";
 import { Badge } from "./shad/badge";
-import { Loader2, X, OctagonAlert } from "lucide-react";
+import { Loader2, X, OctagonAlert, TriangleAlert } from "lucide-react";
 
 interface ProviderCardProps {
   providerLink: string;
@@ -101,10 +101,12 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   data-testid="hc-validator-badge"
                 >
                   {checkerName}
-                  {(failedErrorChecks.includes(checkerName) ||
-                    failedValidationChecks.includes(checkerName)) && (
-                    <OctagonAlert className="ml-1 inline-block w-4 h-4" />
-                  )}
+                  {failedErrorChecks.includes(checkerName) &&
+                    <OctagonAlert className={cn("ml-1 inline-block w-4 h-4 color-red-600")} />
+                  }
+                  {failedValidationChecks.includes(checkerName) && 
+                    <TriangleAlert className={cn("ml-1 inline-block w-4 h-4 color-orange-500")} />
+                  }
                 </Badge>
               ))
             )}
