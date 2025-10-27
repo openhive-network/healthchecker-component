@@ -2,7 +2,7 @@ import { cn } from "./utils.ts";
 import { Button } from "./shad/button";
 import { Card } from "./shad/card";
 import { Badge } from "./shad/badge";
-import { Loader2, X } from "lucide-react";
+import { Loader2, X, OctagonAlert } from "lucide-react";
 
 interface ProviderCardProps {
   providerLink: string;
@@ -37,6 +37,8 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   switchToProvider,
   selectValidator,
 }) => {
+
+
   const handleBadgeClick = (checkerName: string) => {
     if (failedErrorChecks.includes(checkerName) || failedValidationChecks.includes(checkerName))
       selectValidator(providerLink, checkerName);
@@ -81,7 +83,9 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
           </div>
           <div className={"flex flex-wrap items-center gap-2 py-2 pl-4"}>
             {disabled ? (
-              <div>No connection. Possible CORS error or network's problems</div>
+              <div>
+                No connection. Possible CORS error or network's problems
+              </div>
             ) : (
               checkerNamesList.map((checkerName) => (
                 <Badge
@@ -97,6 +101,10 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   data-testid="hc-validator-badge"
                 >
                   {checkerName}
+                  {(failedErrorChecks.includes(checkerName) ||
+                    failedValidationChecks.includes(checkerName)) && (
+                    <OctagonAlert className="ml-1 inline-block w-4 h-4" />
+                  )}
                 </Badge>
               ))
             )}
@@ -127,7 +135,9 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 Set Main
               </Button>
             ) : (
-              <div className="text-green-600" data-testid="hc-selected">Selected</div>
+              <div className="text-green-600" data-testid="hc-selected">
+                Selected
+              </div>
             )}
           </div>
         </div>
