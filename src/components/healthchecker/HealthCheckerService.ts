@@ -2,8 +2,8 @@ import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthChecker
 
 export interface ApiChecker {
   title: string;
-  method: unknown;
-  params: unknown;
+  method: any;
+  params: any;
   validatorFunction: (data: unknown) => string | true;
 }
 
