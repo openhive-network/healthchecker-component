@@ -13,7 +13,8 @@ interface ProviderCardProps {
   latency: number | null;
   score: number;
   index: number;
-  failedChecks: string[];
+  failedErrorChecks: string[];
+  failedValidationChecks: string[];
   isHealthCheckerActive: boolean;
   switchToProvider: (providerLink: string | null) => void;
   deleteProvider: (provider: string) => void;
@@ -29,14 +30,15 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   latency,
   score,
   index,
-  failedChecks,
+  failedErrorChecks,
+  failedValidationChecks,
   isHealthCheckerActive,
   deleteProvider,
   switchToProvider,
   selectValidator,
 }) => {
   const handleBadgeClick = (checkerName: string) => {
-    if (failedChecks.includes(checkerName))
+    if (failedErrorChecks.includes(checkerName) || failedValidationChecks.includes(checkerName))
       selectValidator(providerLink, checkerName);
   };
 
@@ -87,7 +89,9 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   variant="outline"
                   className={cn("m-0.5", {
                     "border-red-600 cursor-pointer":
-                      failedChecks.includes(checkerName),
+                      failedErrorChecks.includes(checkerName),
+                    "border-orange-500 cursor-pointer":
+                      failedValidationChecks.includes(checkerName),
                   })}
                   onClick={() => handleBadgeClick(checkerName)}
                   data-testid="hc-validator-badge"

@@ -2,12 +2,13 @@ import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthChecker
 
 export interface ApiChecker {
   title: string;
-  method: any;
-  params: any;
-  validatorFunction: (data: any) => string | true;
+  method: unknown;
+  params: unknown;
+  validatorFunction: (data: unknown) => string | true;
 }
 
 export type ValidationErrorDetails = {
+  status: "serverError" | "validation";
   checkName: string;
   providerName: string;
   message: string;
@@ -77,7 +78,7 @@ class HealthCheckerService extends EventTarget {
     this.enableLogs = enableLogs;
   }
 
-  emit(eventName: string, detail?: any) {
+  emit(eventName: string, detail?: HealthCheckerFields) {
     this.dispatchEvent(new CustomEvent(eventName, { detail }));
   }
 
@@ -123,15 +124,16 @@ class HealthCheckerService extends EventTarget {
     if (this.enableLogs) console.error(error);
     const endpointId = error.apiEndpoint.id;
     const provider = error.apiUrl || "";
-    this.markValidationError(endpointId, provider, error)
+    this.markValidationError(endpointId, provider, error, false)
   }
 
-  markValidationError = (endpointId: number, providerName: string, error: WaxHealthCheckerValidatorFailedError<string> | WaxHealthCheckerError) => {
+  markValidationError = (endpointId: number, providerName: string, error: WaxHealthCheckerValidatorFailedError<string> | WaxHealthCheckerError, isValidation: boolean = true) => {
     const checkTitle = this.endpointTitleById.get(endpointId);
     let params: string | object | undefined = undefined;
     if ("request" in error) params = error.request.data;
     if (checkTitle) {
       const checkObject: ValidationErrorDetails = {
+        status: isValidation ? "validation" : "serverError",
         checkName: checkTitle,
         providerName: providerName,
         message: error.message,
@@ -165,9 +167,9 @@ class HealthCheckerService extends EventTarget {
    * Part of HC necessary initialization. Set event listeners and default endpoints.
    */
   initializeHealthChecker = async () => {
-    this.healthChecker?.on('error', error => {this.handleHealthCheckerError(error)});
+    this.healthChecker?.on('error', (error: WaxHealthCheckerError) => {this.handleHealthCheckerError(error)});
     this.healthChecker?.on("data", this.updateAppAfterScoredEndpointsChange);
-    this.healthChecker?.on("validationerror", error => this.markValidationError(error.apiEndpoint.id, error.request.endpoint, error));
+    this.healthChecker?.on("validationerror", (error: WaxHealthCheckerValidatorFailedError) => this.markValidationError(error.apiEndpoint.id, error.request.endpoint, error));
     const initialEndpoints: TScoredEndpoint[] | undefined = this.providers?.map(
       (customProvider) => ({endpointUrl: customProvider, score: -1, up: true, latencies: []})
     )

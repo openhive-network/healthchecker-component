@@ -103,6 +103,7 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
         }
       );
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const renderProvider = (
@@ -134,10 +135,15 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
         index={index + 1}
         score={scoredEndpoint.score}
         deleteProvider={removeProvider}
-        failedChecks={
+        failedErrorChecks={
           failedChecksByProvider
             .get(endpointUrl)
-            ?.map((failedCheck) => failedCheck.checkName) || []
+            ?.filter((failedCheck) => failedCheck.status === "serverError")?.map((failedCheck) => failedCheck.checkName)|| []
+        }
+        failedValidationChecks={
+          failedChecksByProvider
+            .get(endpointUrl)
+            ?.filter((failedCheck) => failedCheck.status === "validation")?.map((failedCheck) => failedCheck.checkName)|| []
         }
         selectValidator={selectValidator}
         isHealthCheckerActive={!!isActive}
