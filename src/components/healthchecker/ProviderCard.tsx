@@ -102,10 +102,10 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 >
                   {checkerName}
                   {failedErrorChecks.includes(checkerName) &&
-                    <OctagonAlert className={cn("ml-1 inline-block w-4 h-4 color-red-600")} />
+                    <OctagonAlert className={cn("ml-1 inline-block w-4 h-4 text-red-600")} />
                   }
                   {failedValidationChecks.includes(checkerName) && 
-                    <TriangleAlert className={cn("ml-1 inline-block w-4 h-4 color-orange-500")} />
+                    <TriangleAlert className={cn("ml-1 inline-block w-4 h-4 text-orange-500")} />
                   }
                 </Badge>
               ))
