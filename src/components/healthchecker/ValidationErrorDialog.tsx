@@ -37,21 +37,31 @@ const ValidationErrorDialog: React.FC<ValidationErrorDialogProps> = ({
   return (
     <Dialog open={isOpened} onOpenChange={onDialogOpenChange}>
       <DialogContent className={"bg-gray-800 text-white"}>
-        <DialogHeader><DialogTitle>{validatorDetails?.checkName} validator error</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>
+            {validatorDetails?.checkName}{" "}
+            {validatorDetails?.status === "serverError"
+              ? "connection"
+              : "validation"}{" "}
+            error
+          </DialogTitle>
+        </DialogHeader>
         <div>Message:</div>
         <div>{validatorDetails?.message}</div>
         <div>Path:</div>
         <pre>{validatorDetails?.paths.join("/")}</pre>
-        {validatorDetails?.params && <>
-          <div>Params:</div>
-          <pre>{displayPrettyJSON()}</pre>
-        </>}
-      <DialogFooter>
-        <Button onClick={handleErrorClearClick}>Clear error</Button>
-      </DialogFooter>
+        {validatorDetails?.params && (
+          <>
+            <div>Params:</div>
+            <pre>{displayPrettyJSON()}</pre>
+          </>
+        )}
+        <DialogFooter>
+          <Button onClick={handleErrorClearClick}>Clear error</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 };
 
 export default ValidationErrorDialog;
