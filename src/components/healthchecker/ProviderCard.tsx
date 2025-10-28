@@ -2,7 +2,7 @@ import { cn } from "./utils.ts";
 import { Button } from "./shad/button";
 import { Card } from "./shad/card";
 import { Badge } from "./shad/badge";
-import { Loader2, X, OctagonAlert, TriangleAlert } from "lucide-react";
+import { Loader2, X, OctagonAlert, TriangleAlert, CircleCheck } from "lucide-react";
 
 interface ProviderCardProps {
   providerLink: string;
@@ -53,7 +53,6 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
         "lg:flex-row lg:flex-wrap lg:items-center",
         {
           "outline outline-2 outline-offset-2 mb-6": isTop,
-          "border-green-600": isSelected,
         }
       )}
     >
@@ -78,7 +77,14 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
               })}
               data-testid="hc-api-name"
             >
-              {providerLink}
+              {providerLink}{" "}
+              {!disabled &&
+                !failedErrorChecks.length &&
+                !failedValidationChecks.length &&
+                isHealthCheckerActive &&
+                score !== -1 && (
+                  <CircleCheck className="ml-1 inline-block w-4 h-4 text-green-600" />
+              )}
             </p>
           </div>
           <div className={"flex flex-wrap items-center gap-2 py-2 pl-4"}>
@@ -101,12 +107,18 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                   data-testid="hc-validator-badge"
                 >
                   {checkerName}
-                  {failedErrorChecks.includes(checkerName) &&
-                    <OctagonAlert className={cn("ml-1 inline-block w-4 h-4 text-red-600")} />
-                  }
-                  {failedValidationChecks.includes(checkerName) && 
-                    <TriangleAlert className={cn("ml-1 inline-block w-4 h-4 text-orange-500")} />
-                  }
+                  {failedErrorChecks.includes(checkerName) && (
+                    <OctagonAlert
+                      className={cn("ml-1 inline-block w-4 h-4 text-red-600")}
+                    />
+                  )}
+                  {failedValidationChecks.includes(checkerName) && (
+                    <TriangleAlert
+                      className={cn(
+                        "ml-1 inline-block w-4 h-4 text-orange-500"
+                      )}
+                    />
+                  )}
                 </Badge>
               ))
             )}
