@@ -1,10 +1,10 @@
 import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax/vite";
 
-export interface ApiChecker {
+export interface ApiChecker <T = unknown> {
   title: string;
   method: any;
   params: any;
-  validatorFunction: (data: unknown) => string | true;
+  validatorFunction: (data: T) => string | true;
 }
 
 export type ValidationErrorDetails = {
