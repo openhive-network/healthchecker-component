@@ -1,4 +1,4 @@
 catalogs:
   # Can be referenced through "catalog:hiveio-toolset"
   hiveio-toolset:
-    "@hiveio/wax": 1.27.12-rc3
+    "@hiveio/wax": 1.27.12-rc3-251105101534

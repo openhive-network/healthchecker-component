@@ -1,4 +1,4 @@
-import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax/vite";
+import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax";
 
 export interface ApiChecker <T = unknown> {
   title: string;

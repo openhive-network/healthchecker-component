@@ -19,7 +19,7 @@ export default defineConfig({
     }, 
     rollupOptions: { 
       external: [...Object.keys(peerDependencies), 
-        "@hiveio/wax/vite" // Add this for proper build - vite does not detect hiveio/wax/vite from peerDependencies
+        "@hiveio/wax" // Add this for proper build - vite does not detect hiveio/wax from peerDependencies
       ],
       output: { globals: { react: 'React', 'react-dom': 'ReactDOM' } } 
     }

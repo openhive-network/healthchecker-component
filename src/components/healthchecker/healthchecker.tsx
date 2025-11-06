@@ -1,5 +1,5 @@
 import { cn } from "./utils.ts";
-import { TScoredEndpoint } from "@hiveio/wax/vite";
+import { TScoredEndpoint } from "@hiveio/wax";
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "./shad/button";
