@@ -71,13 +71,15 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
         <div className="flex flex-col w-full md:w-1/2">
           <div className="flex gap-4">
             <p>{index}</p>
-            <p
-              className={cn("text-center", {
-                "text-red-600": disabled,
-              })}
-              data-testid="hc-api-name"
-            >
-              {providerLink}{" "}
+            <div>
+              <p
+                className={cn("text-center", {
+                  "text-red-600": disabled,
+                })}
+                data-testid="hc-api-name"
+              >
+                {providerLink}
+              </p>
               {!disabled &&
                 !failedErrorChecks.length &&
                 !failedValidationChecks.length &&
@@ -85,7 +87,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
                 score !== -1 && (
                   <CircleCheck className="ml-1 inline-block w-4 h-4 text-green-600" />
               )}
-            </p>
+            </div>
           </div>
           <div className={"flex flex-wrap items-center gap-2 py-2 pl-4"}>
             {disabled ? (
