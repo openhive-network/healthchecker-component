@@ -6,6 +6,7 @@ import { Button } from "./shad/button";
 import ProviderCard from "./ProviderCard";
 import ProviderAdditionDialog from "./ProviderAddition.tsx";
 import ValidationErrorDialog from "./ValidationErrorDialog";
+import ConfirmationSwitchDialog from "./ConfirmationSwitchDialog";
 import { ValidationErrorDetails, ApiChecker } from "./index.ts";
 import { HealthCheckerService } from "./index.ts";
 import { Toggle } from "./shad/toggle.tsx";
@@ -54,6 +55,11 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
   const [selectedValidator, setSelectedValidator] = useState<
     ValidationErrorDetails | undefined
   >(undefined);
+  const [isConfirmationSwitchDialogOpened, setIsConfirmationSwitchDialogOpened] =
+    useState<boolean>(false);
+  const [pendingProviderSwitch, setPendingProviderSwitch] = useState<
+    string | undefined
+  >(undefined);
 
   const handleAdditionOfProvider = (provider: string) => {
     addProvider(provider);
@@ -66,6 +72,37 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
     if (foundValidator) {
       setSelectedValidator(foundValidator);
       setIsValidationErrorDialogOpened(true);
+    }
+  };
+
+  const checkIfProviderIsValid = (providerLink: string): boolean => {
+    const scoredEndpoint = scoredEndpoints?.find(
+      (endpoint) => endpoint.endpointUrl === providerLink
+    );
+    if (!scoredEndpoint) return false;
+    const failedChecks = failedChecksByProvider.get(providerLink) || [];
+    return (
+      scoredEndpoint.score > 0 &&
+      (!failedChecks || failedChecks.length === 0)
+    )
+
+  }
+
+  const handleSwitchToProvider = (providerLink: string | null) => {
+    if (!providerLink) return;
+    if (checkIfProviderIsValid(providerLink)) {
+      handleChangeOfNode(providerLink);
+    } else {
+      setPendingProviderSwitch(providerLink);
+      setIsConfirmationSwitchDialogOpened(true);
+    }
+  };
+
+  const handleConfirmProviderSwitch = () => {
+    if (pendingProviderSwitch) {
+      handleChangeOfNode(pendingProviderSwitch);
+      setPendingProviderSwitch(undefined);
+      setIsConfirmationSwitchDialogOpened(false)
     }
   };
 
@@ -125,7 +162,7 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
         isTop={!!isTop}
         key={endpointUrl}
         providerLink={endpointUrl}
-        switchToProvider={handleChangeOfNode}
+        switchToProvider={handleSwitchToProvider}
         disabled={score === 0}
         latency={lastLatency}
         isSelected={scoredEndpoint.endpointUrl === nodeAddress}
@@ -146,6 +183,7 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
             ?.filter((failedCheck) => failedCheck.status === "validation")?.map((failedCheck) => failedCheck.checkName)|| []
         }
         selectValidator={selectValidator}
+        isProviderValid={checkIfProviderIsValid(endpointUrl)}
         isHealthCheckerActive={!!isActive}
       />
     );
@@ -249,6 +287,12 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
         onDialogOpenChange={setIsValidationErrorDialogOpened}
         validatorDetails={selectedValidator}
         clearValidationError={clearValidationError}
+      />
+      <ConfirmationSwitchDialog
+        isOpened={isConfirmationSwitchDialogOpened}
+        onDialogOpenChange={setIsConfirmationSwitchDialogOpened}
+        onConfirm={handleConfirmProviderSwitch}
+        providerLink={pendingProviderSwitch}
       />
     </div>
   );

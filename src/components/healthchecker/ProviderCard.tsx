@@ -16,6 +16,7 @@ interface ProviderCardProps {
   failedErrorChecks: string[];
   failedValidationChecks: string[];
   isHealthCheckerActive: boolean;
+  isProviderValid: boolean;
   switchToProvider: (providerLink: string | null) => void;
   deleteProvider: (provider: string) => void;
   selectValidator: (providerName: string, checkTitle: string) => void;
@@ -33,6 +34,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
   failedErrorChecks,
   failedValidationChecks,
   isHealthCheckerActive,
+  isProviderValid,
   deleteProvider,
   switchToProvider,
   selectValidator,
@@ -80,11 +82,8 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
               >
                 {providerLink}
               </p>
-              {!disabled &&
-                !failedErrorChecks.length &&
-                !failedValidationChecks.length &&
-                isHealthCheckerActive &&
-                score !== -1 && (
+              {isProviderValid &&
+                isHealthCheckerActive && (
                   <CircleCheck className="ml-1 inline-block w-4 h-4 text-green-600" />
               )}
             </div>
