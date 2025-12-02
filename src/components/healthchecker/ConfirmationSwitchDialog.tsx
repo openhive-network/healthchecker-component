@@ -32,7 +32,7 @@ const ConfirmationSwitchDialog: React.FC<ConfirmationSwitchDialogProps> = ({
           <span className="font-semibold">{providerLink}</span>?
         </div>
         <DialogFooter>
-          <Button onClick={() => onDialogOpenChange(false)} variant="outline">
+          <Button onClick={() => onDialogOpenChange(false)} variant="outline" className="text-white dark:text-black">
             Cancel
           </Button>
           <Button onClick={onConfirm}>Confirm</Button>
