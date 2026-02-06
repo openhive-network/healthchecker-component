@@ -1,4 +1,5 @@
 stages:
+  - .pre
   - build
   - deploy
 
@@ -9,7 +10,7 @@ variables:
 
 include:
   - project: 'hive/common-ci-configuration'
-    ref: 590bfd88a491efba5a39571bc2c82ffbabda2ec8
+    ref: 764e68f0
     file:
       - '/templates/npm_projects.gitlab-ci.yml'
 
@@ -17,9 +18,18 @@ default:
   tags:
     - public-runner-docker
 
+lint:
+  stage: .pre
+  extends: .npm_based_job_base
+  script:
+    - npm run lint-ci
+
+
 build:
   stage: build
   extends: .npm_based_job_base
+  needs:
+    - job: lint
   variables:
     NPM_PACKAGE_SCOPE: "@hiveio"
     NPM_PACKAGE_NAME: "healthchecker-component"
