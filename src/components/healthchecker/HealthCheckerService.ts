@@ -2,7 +2,9 @@ import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthChecker
 
 export interface ApiChecker <T = unknown> {
   title: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   method: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   params: any;
   validatorFunction: (data: T) => string | true;
 }
