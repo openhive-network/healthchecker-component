@@ -1,5 +1,4 @@
 stages:
-  - .pre
   - build
   - deploy
 
@@ -18,13 +17,6 @@ default:
   tags:
     - public-runner-docker
 
-lint:
-  stage: .pre
-  extends: .npm_based_job_base
-  script:
-    - npm run lint-ci
-
-
 build:
   stage: build
   extends: .npm_based_job_base
@@ -32,8 +24,6 @@ build:
     NPM_PACKAGE_SCOPE: "@hiveio"
     NPM_PACKAGE_NAME: "healthchecker-component"
     NPM_REGISTRY_URL: "gitlab.syncad.com/api/v4/projects/${CI_PROJECT_ID}/packages/npm/"
-  needs:
-    - job: lint
   script:
     - /home/emscripten/scripts/npm_generate_version.sh "${CI_PROJECT_DIR}" "${NPM_REGISTRY_URL}" "${NPM_PACKAGE_SCOPE}" "${NPM_PACKAGE_NAME}" "${CI_COMMIT_REF_PROTECTED}" "${CI_COMMIT_TAG}"
     - pnpm build
