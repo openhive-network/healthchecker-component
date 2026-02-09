@@ -1,3 +1,5 @@
+packages: []
+
 catalogs:
   # Can be referenced through "catalog:hiveio-toolset"
   hiveio-toolset:

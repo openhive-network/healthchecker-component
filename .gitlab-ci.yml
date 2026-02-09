@@ -9,8 +9,9 @@ variables:
   GIT_SUBMODULE_STRATEGY: recursive
 
 include:
+  - template: Workflows/Branch-Pipelines.gitlab-ci.yml
   - project: 'hive/common-ci-configuration'
-    ref: 764e68f0
+    ref: 296649fb125e2cb3f22686f2c2bd662b19e17c72
     file:
       - '/templates/npm_projects.gitlab-ci.yml'
 
@@ -24,52 +25,44 @@ lint:
   script:
     - npm run lint-ci
 
-
 build:
   stage: build
-  extends: .npm_based_job_base
-  needs:
-    - job: lint
+  extends: .npm_build_template
   variables:
+    DIST_DIR: "$CI_PROJECT_DIR/dist"
     NPM_PACKAGE_SCOPE: "@hiveio"
     NPM_PACKAGE_NAME: "healthchecker-component"
-    NPM_REGISTRY_URL: "gitlab.syncad.com/api/v4/projects/${CI_PROJECT_ID}/packages/npm/"
-  script:
-    - /home/emscripten/scripts/npm_generate_version.sh "${CI_PROJECT_DIR}" "${NPM_REGISTRY_URL}" "${NPM_PACKAGE_SCOPE}" "${NPM_PACKAGE_NAME}" "${CI_COMMIT_REF_PROTECTED}" "${CI_COMMIT_TAG}"
-    - pnpm build
-  artifacts:
-    reports:
-      dotenv:
-        - "built_package_version_info.env" # contains information related to generated package version and git revision
-    paths:
-      - "dist"
-      - "package.json"
-    when: always
-    expire_in: 1 week
-
-
+  needs:
+    - job: lint
 
 deploy_dev_package:
   stage: deploy
   extends: .npm_deploy_package_template
   variables:
     NPM_PACKAGE_SCOPE: "@hiveio"
+    DIST_DIR: "$CI_PROJECT_DIR/dist"
+  before_script:
+    - export PACKAGE_TGZ_PATH="${DIST_DIR}/$(basename ${BUILT_PACKAGE_PATH})"
+    - !reference [.npm_deploy_package_template, before_script]
   needs:
     - job: build
       artifacts: true
-  before_script: # Override to skip processing nonexistent tarball file
-    - !reference [.npm_based_job_base, before_script]
 
 deploy_production_public_npm:
   stage: deploy
   extends: .registry_npmjs_org_deploy_package_template
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
   variables:
     NPM_PUBLISH_TOKEN: "$INTERNAL_HIDDEN_PUBLISH_TOKEN"
     NPM_PACKAGE_NAME: "healthchecker-component"
+    NPM_PROVENANCE_ENABLE: "0"
+    DIST_DIR: "$CI_PROJECT_DIR/dist"
+  before_script:
+    - export PACKAGE_TGZ_PATH="${DIST_DIR}/$(basename ${BUILT_PACKAGE_PATH})"
+    - !reference [.registry_npmjs_org_deploy_package_template, before_script]
   needs:
     - job: deploy_dev_package
     - job: build
       artifacts: true
-  before_script: # Override to skip processing nonexistent tarball file
-    - !reference [.npm_based_job_base, before_script]
-
