@@ -51,7 +51,6 @@ deploy_dev_package:
 deploy_production_public_npm:
   extends:
     - .registry_npmjs_org_deploy_package_template
-    - .cross_runner_unpack_tarball
   stage: deploy
   variables:
     NPM_PUBLISH_TOKEN: "$INTERNAL_HIDDEN_PUBLISH_TOKEN"
