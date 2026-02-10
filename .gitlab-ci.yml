@@ -11,7 +11,7 @@ variables:
 include:
   - template: Workflows/Branch-Pipelines.gitlab-ci.yml
   - project: 'hive/common-ci-configuration'
-    ref: 296649fb125e2cb3f22686f2c2bd662b19e17c72
+    ref: 8668a730c5a9ff78ee9597ba430e7e95088fa9b0
     file:
       - '/templates/npm_projects.gitlab-ci.yml'
 
@@ -49,19 +49,14 @@ deploy_dev_package:
       artifacts: true
 
 deploy_production_public_npm:
+  extends:
+    - .registry_npmjs_org_deploy_package_template
+    - .cross_runner_unpack_tarball
   stage: deploy
-  extends: .registry_npmjs_org_deploy_package_template
-  id_tokens:
-    SIGSTORE_ID_TOKEN:
-      aud: sigstore
   variables:
     NPM_PUBLISH_TOKEN: "$INTERNAL_HIDDEN_PUBLISH_TOKEN"
     NPM_PACKAGE_NAME: "healthchecker-component"
-    NPM_PROVENANCE_ENABLE: "0"
     DIST_DIR: "$CI_PROJECT_DIR/dist"
-  before_script:
-    - export PACKAGE_TGZ_PATH="${DIST_DIR}/$(basename ${BUILT_PACKAGE_PATH})"
-    - !reference [.registry_npmjs_org_deploy_package_template, before_script]
   needs:
     - job: deploy_dev_package
     - job: build
