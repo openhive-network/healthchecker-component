@@ -11,7 +11,7 @@ variables:
 include:
   - template: Workflows/Branch-Pipelines.gitlab-ci.yml
   - project: 'hive/common-ci-configuration'
-    ref: 13581fecea817f76e96644880f4fb7490c315777
+    ref: 7b42a5584d854c2aee4b7e02cfd3de2bc4e8d77e
     file:
       - '/templates/npm_projects.gitlab-ci.yml'
 
@@ -41,9 +41,6 @@ deploy_dev_package:
   variables:
     NPM_PACKAGE_SCOPE: "@hiveio"
     DIST_DIR: "$CI_PROJECT_DIR/dist"
-  before_script:
-    - export PACKAGE_TGZ_PATH="${DIST_DIR}/$(basename ${BUILT_PACKAGE_PATH})"
-    - !reference [.npm_deploy_package_template, before_script]
   needs:
     - job: build
       artifacts: true
