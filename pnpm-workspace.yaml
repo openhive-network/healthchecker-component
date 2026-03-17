@@ -3,4 +3,4 @@ packages: []
 catalogs:
   # Can be referenced through "catalog:hiveio-toolset"
   hiveio-toolset:
-    "@hiveio/wax": 1.28.6-rc10-stable.260313112809
+    "@hiveio/wax": 1.28.6-rc10-stable.260317114454
