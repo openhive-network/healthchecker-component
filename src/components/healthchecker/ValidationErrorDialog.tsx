@@ -36,7 +36,7 @@ const ValidationErrorDialog: React.FC<ValidationErrorDialogProps> = ({
 
   return (
     <Dialog open={isOpened} onOpenChange={onDialogOpenChange}>
-      <DialogContent className={"bg-gray-800 text-white"}>
+      <DialogContent className="max-w-md sm:max-w-lg w-full mx-4 max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {validatorDetails?.checkName}{" "}
