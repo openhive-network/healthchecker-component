@@ -23,16 +23,16 @@ const ConfirmationSwitchDialog: React.FC<ConfirmationSwitchDialogProps> = ({
 
   return (
     <Dialog open={isOpened} onOpenChange={onDialogOpenChange}>
-      <DialogContent className={"bg-gray-800 text-white"}>
+      <DialogContent className="max-w-sm sm:max-w-md w-full mx-4">
         <DialogHeader>
           <DialogTitle>Confirm Provider Switch</DialogTitle>
         </DialogHeader>
-        <div>
+        <div className="text-sm sm:text-base">
           Are you sure you want to switch to unconfirmed{" "}
-          <span className="font-semibold">{providerLink}</span>?
+          <span className="font-semibold break-words">{providerLink}</span>?
         </div>
         <DialogFooter>
-          <Button onClick={() => onDialogOpenChange(false)} variant="outline" className="text-black dark:text-white">
+          <Button onClick={() => onDialogOpenChange(false)} variant="outline">
             Cancel
           </Button>
           <Button onClick={onConfirm}>Confirm</Button>
