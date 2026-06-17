@@ -26,6 +26,7 @@ export interface HealthCheckerFields {
   providers?: string[];
   isActive?: boolean;
   switchStatus?: "waiting" | "done" | "no_change";
+  versionsByProvider: Map<string, string>;
 }
 
 const LOCAL_PROVIDERS = "localProviders";
@@ -36,9 +37,11 @@ class HealthCheckerService extends EventTarget {
   private healthChecker?: HealthChecker;
   private endpointTitleById: Map<number, string> = new Map();
   private enableLogs?: boolean;
-  
-  
+  private getProviderVersion?: (providerUrl: string) => Promise<string | null>;
+
+
   public scoredEndpoints?: TScoredEndpoint[];
+  public versionsByProvider: Map<string, string> = new Map();
   public failedChecksByProvider: Map<string, ValidationErrorDetails[]> = new Map();
   public nodeAddress: string | null = null;
   public providers?: string[];
@@ -55,8 +58,10 @@ class HealthCheckerService extends EventTarget {
    * @param apiCheckers 
    * @param defaultProviders 
    * @param nodeAddress 
-   * @param changeNodeAddress 
-   * @param enableLogs 
+   * @param changeNodeAddress
+   * @param enableLogs
+   * @param getProviderVersion optional resolver returning a version string for a given provider URL.
+   *  When provided, the component fetches and displays a version per provider. Should fail soft (return null) on error.
    * Initialize necessery part of HC process. Set providers, chekers and addresses. Don't start checks yet.
    */
   constructor(
@@ -66,6 +71,7 @@ class HealthCheckerService extends EventTarget {
     nodeAddress: string | null,
     changeNodeAddress: (node: string | null) => void,
     enableLogs?: boolean,
+    getProviderVersion?: (providerUrl: string) => Promise<string | null>,
   ) {
     super();
     this.serviceKey = serviceKey;
@@ -78,6 +84,7 @@ class HealthCheckerService extends EventTarget {
     this.changeNodeAddress = changeNodeAddress;
     this.initializeHealthChecker();
     this.enableLogs = enableLogs;
+    this.getProviderVersion = getProviderVersion;
   }
 
   emit(eventName: string, detail?: HealthCheckerFields) {
@@ -249,6 +256,7 @@ class HealthCheckerService extends EventTarget {
         this.providers = [...(this.providers || []), provider];
         this.scoredEndpoints = [...this.scoredEndpoints || [], {endpointUrl: provider, score: -1, up: true, latencies: []}]
         this.emit(`stateChange-${this.serviceKey}`, this.getComponentData());
+        this.fetchProviderVersions();
       }
     }
   }
@@ -275,6 +283,32 @@ class HealthCheckerService extends EventTarget {
     this.healthChecker?.unregisterAll();
     this.registerCalls();
     this.emit(`stateChange-${this.serviceKey}`, this.getComponentData());
+    this.fetchProviderVersions();
+  }
+
+  /**
+   * Fetches a version string for each provider that does not have one cached yet,
+   * using the optional `getProviderVersion` resolver. No-op when no resolver was provided.
+   * Safe to call repeatedly (only missing providers are fetched). Fails soft per provider.
+   */
+  fetchProviderVersions = async () => {
+    if (!this.getProviderVersion || !this.providers) return;
+    const providersToFetch = this.providers.filter(
+      (provider) => !this.versionsByProvider.has(provider)
+    );
+    await Promise.all(
+      providersToFetch.map(async (provider) => {
+        try {
+          const version = await this.getProviderVersion!(provider);
+          if (version) {
+            this.versionsByProvider = new Map(this.versionsByProvider).set(provider, version);
+            this.emit(`stateChange-${this.serviceKey}`, this.getComponentData());
+          }
+        } catch (error) {
+          if (this.enableLogs) console.error(`HealthChecker: failed to fetch version for ${provider}`, error);
+        }
+      })
+    );
   }
 
   getComponentData = (): HealthCheckerFields | undefined => {
@@ -287,6 +321,7 @@ class HealthCheckerService extends EventTarget {
       providers: this.providers,
       isActive: this.isActive,
       switchStatus: this.switchStatus,
+      versionsByProvider: this.versionsByProvider,
     }
   }
 

@@ -6,6 +6,7 @@ import { Loader2, X, OctagonAlert, TriangleAlert, CircleCheck } from "lucide-rea
 
 interface ProviderCardProps {
   providerLink: string;
+  version?: string | null;
   disabled: boolean;
   isSelected: boolean;
   isTop: boolean;
@@ -24,6 +25,7 @@ interface ProviderCardProps {
 
 const ProviderCard: React.FC<ProviderCardProps> = ({
   providerLink,
+  version,
   disabled,
   isSelected,
   isTop,
@@ -85,6 +87,14 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
               {isProviderValid &&
                 isHealthCheckerActive && (
                   <CircleCheck className="ml-1 inline-block w-4 h-4 text-green-600" />
+              )}
+              {version && (
+                <p
+                  className="text-xs text-gray-500 dark:text-gray-400"
+                  data-testid="hc-node-version"
+                >
+                  Version: {version}
+                </p>
               )}
             </div>
           </div>

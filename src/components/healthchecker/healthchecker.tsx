@@ -49,6 +49,9 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
   const [switchStatus, setSwitchStatus] = useState<
     "waiting" | "done" | "no_change" | undefined
   >(undefined);
+  const [versionsByProvider, setVersionsByProvider] = useState<
+    Map<string, string>
+  >(new Map());
 
   const [isValidationErrorDialogOpened, setIsValidationErrorDialogOpened] =
     useState<boolean>(false);
@@ -116,6 +119,7 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
       setNodeAddress(hcData?.nodeAddress);
       setIsActive(hcData?.isActive);
       setSwitchStatus(hcData?.switchStatus);
+      setVersionsByProvider(hcData?.versionsByProvider);
     }
   };
 
@@ -132,6 +136,7 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
       actualizeData();
     });
     actualizeData();
+    healthCheckerService.fetchProviderVersions();
     return () => {
       healthCheckerService.removeEventListener(
         `stateChange-${serviceKey}`,
@@ -162,6 +167,7 @@ const HealthCheckerComponent: React.FC<HealthCheckerComponentProps> = ({
         isTop={!!isTop}
         key={endpointUrl}
         providerLink={endpointUrl}
+        version={versionsByProvider.get(endpointUrl) ?? null}
         switchToProvider={handleSwitchToProvider}
         disabled={score === 0}
         latency={lastLatency}
