@@ -44,6 +44,14 @@ src/
         └── toggle.tsx
 ```
 
+## Working in an AIDEV workflow
+When AIDEV runs you on an issue, no one is there to answer questions. GitLab CI doesn't run for AIDEV branches; the checks below are the verification.
+
+- **Check your change:** run `aidev test run --slot quick` once, after your last edit. It runs ESLint (`--max-warnings 0`), `tsc --noEmit` and the library build (`tsc && vite build`), and checks that the files package.json `exports`/`types` name exist in `dist/`.
+- **Iterate:** `.aidev/run-checks.sh dev lint` (or `typecheck` / `build`) runs one step.
+- **Consumers:** hive/denser (blog and wallet, Next.js 16 / React 19) uses this package through its pnpm catalog. Keep the public API (`src/index.ts`) compatible, or say in the issue what consumers must change.
+- **Dependencies:** a change to `pnpm-lock.yaml`, `.npmrc` or `packageManager` needs a new test image. Run `.aidev/runtime/build.sh --push` and put the printed reference in `.aidev/project.yaml` `environment.image` in the same commit (see `.aidev/README.md`).
+
 ## Development Commands
 
 ```bash
