@@ -28,3 +28,5 @@ dist-ssr
 storybook-static
 
 src/index.css
+# AIDEV suite output (.aidev/run-checks.sh)
+test-results/
