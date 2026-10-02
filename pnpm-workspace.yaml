@@ -1,4 +1,7 @@
-packages: []
+# The render tests run against each React these packages install (vitest.config.ts).
+packages:
+  - "tests/react18"
+  - "tests/react19"
 
 catalogs:
   # Can be referenced through "catalog:hiveio-toolset"

@@ -15,17 +15,22 @@ the failure body.
 |---|---|
 | `lint` | ESLint, `--max-warnings 0` (package.json `lint`) |
 | `typecheck` | `tsc --noEmit` |
+| `test` | the render tests in `tests/` under React 18 and 19; junit in `render-tests.xml` |
 | `build` | the published artifact: `tsc && vite build` |
 | `dist-exports` | (after `build`) the files package.json `exports`/`types` name exist in `dist/` |
+| `no-bundled-react` | (after `build`) `dist/` imports React (`react/jsx-runtime` included) from the consumer rather than carrying a copy |
 
 | Slot | Steps |
 |---|---|
-| quick, full, canary | lint, typecheck, build |
+| quick, full, canary | lint, typecheck, test, build |
 | static | lint, typecheck |
 | baseline, coverage, system | build |
 
-The library has no tests yet; adding them (rendering the component against the React
-versions its consumers use) is the first thing to bind into `quick`/`full`.
+The render tests mount `HealthCheckerComponent` and its dialogs with `@hiveio/wax`'s
+`HealthChecker` stubbed, and fail on any console error or warning. Each React they run
+under is a workspace package (`tests/react18`, `tests/react19`) that installs `react`,
+`react-dom` and `@testing-library/react`; `vitest.config.ts` has one project per package
+aliasing those names to it.
 
 ## The test runtime image (`runtime/`)
 
