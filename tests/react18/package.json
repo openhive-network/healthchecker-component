@@ -1,0 +1,11 @@
+{
+  "name": "healthchecker-component-tests-react18",
+  "private": true,
+  "description": "React 18 for the render tests (vitest.config.ts aliases react, react-dom and @testing-library/react here)",
+  "dependencies": {
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

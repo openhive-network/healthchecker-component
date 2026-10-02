@@ -14,7 +14,7 @@ Published as `@hiveio/healthchecker-component` to GitLab package registry and np
 ## Tech Stack
 
 - **Language:** TypeScript 5.2.2 (strict mode)
-- **Framework:** React 18.2.0 (peer dependency)
+- **Framework:** React 18.2+ or 19 (peer dependency; never bundled, `vite.config.ts` externalises every peer subpath such as `react/jsx-runtime`)
 - **Build:** Vite 5.2.0 (library mode, ES modules only)
 - **Styling:** Tailwind CSS 3.4.12, shadcn/ui components, Radix UI primitives
 - **Icons:** Lucide React
@@ -59,6 +59,7 @@ pnpm install         # Install dependencies
 pnpm dev             # Start Vite dev server with HMR
 pnpm build           # TypeScript check + Vite library build (outputs to dist/)
 pnpm lint            # Run ESLint (max-warnings 0)
+pnpm test            # Render tests (tests/) under React 18 and 19
 pnpm preview         # Preview production build
 ```
 

@@ -28,7 +28,7 @@ branches:
 # How this project's suites execute (#13892): one kind, stated once.
 environment:
   kind: "container"
-  image: "registry.gitlab.syncad.com/hive/healthchecker-component/aidev-tests@sha256:74bb8067a18e8e9d33e555b2b46945ed7df54b4a95faadfdd5ae4ecdffafc4b5"
+  image: "registry.gitlab.syncad.com/hive/healthchecker-component/aidev-tests@sha256:2798e1b681b4b7144bc10e6a99d9659eb3bea03b040194d2cafee45570c133d8"
   inputs: ["pnpm-lock.yaml"]
 
 issues:
@@ -48,11 +48,11 @@ issues:
 verification:
   quick:
     adapter: command
-    args: [".aidev/run-checks.sh", "quick", "lint", "typecheck", "build"]
+    args: [".aidev/run-checks.sh", "quick", "lint", "typecheck", "test", "build"]
     artifacts: ["test-results/quick/"]
   full:
     adapter: command
-    args: [".aidev/run-checks.sh", "full", "lint", "typecheck", "build"]
+    args: [".aidev/run-checks.sh", "full", "lint", "typecheck", "test", "build"]
     artifacts: ["test-results/full/"]
   baseline:
     adapter: command
@@ -60,7 +60,7 @@ verification:
     artifacts: ["test-results/baseline/"]
   canary:
     adapter: command
-    args: [".aidev/run-checks.sh", "canary", "lint", "typecheck", "build"]
+    args: [".aidev/run-checks.sh", "canary", "lint", "typecheck", "test", "build"]
     artifacts: ["test-results/canary/"]
   static:
     adapter: command
