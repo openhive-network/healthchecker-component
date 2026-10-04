@@ -14,9 +14,6 @@ importers:
 
   .:
     dependencies:
-      '@hiveio/wax':
-        specifier: catalog:hiveio-toolset
-        version: 1.28.6-rc10-stable.260317114454
       react:
         specifier: ^18.2.0 || ^19.0.0
         version: 18.3.1
@@ -24,6 +21,9 @@ importers:
         specifier: ^18.2.0 || ^19.0.0
         version: 18.3.1(react@18.3.1)
     devDependencies:
+      '@hiveio/wax':
+        specifier: catalog:hiveio-toolset
+        version: 1.28.6-rc10-stable.260317114454
       '@radix-ui/react-dialog':
         specifier: ^1.1.23
         version: 1.1.23(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -129,6 +129,12 @@ importers:
       react-dom:
         specifier: ^19.3.0
         version: 19.3.0(react@19.3.0)
+
+  tests/wax2:
+    dependencies:
+      '@hiveio/wax':
+        specifier: 2.0.2
+        version: 2.0.2
 
 packages:
 
@@ -562,6 +568,10 @@ packages:
 
   '@hiveio/wax@1.28.6-rc10-stable.260317114454':
     resolution: {integrity: sha1-s59upXMgfINsxteaB3OX0rIZvq8=, tarball: https://gitlab.syncad.com/api/v4/projects/419/packages/npm/@hiveio/wax/-/@hiveio/wax-1.28.6-rc10-stable.260317114454.tgz}
+    engines: {node: ^20.11 || >= 21.2}
+
+  '@hiveio/wax@2.0.2':
+    resolution: {integrity: sha1-3JurSNe7ALUNgewAEnlsgdbPxHw=, tarball: https://gitlab.syncad.com/api/v4/projects/419/packages/npm/@hiveio/wax/-/@hiveio/wax-2.0.2.tgz}
     engines: {node: ^20.11 || >= 21.2}
 
   '@humanwhocodes/config-array@0.13.0':
@@ -3044,6 +3054,10 @@ snapshots:
   '@eslint/js@8.57.1': {}
 
   '@hiveio/wax@1.28.6-rc10-stable.260317114454':
+    dependencies:
+      events: 3.3.0
+
+  '@hiveio/wax@2.0.2':
     dependencies:
       events: 3.3.0
 

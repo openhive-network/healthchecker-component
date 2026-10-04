@@ -1,0 +1,12 @@
+// The library and its render tests compiled against this package's @hiveio/wax instead of
+// the dev-catalog version the root tsconfig.json resolves.
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@hiveio/wax": ["./node_modules/@hiveio/wax"],
+      "@hiveio/wax/*": ["./node_modules/@hiveio/wax/*"]
+    }
+  },
+  "include": ["../../src", "../../tests/*.ts", "../../tests/*.tsx"]
+}

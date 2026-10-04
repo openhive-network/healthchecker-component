@@ -15,9 +15,11 @@ the failure body.
 |---|---|
 | `lint` | ESLint, `--max-warnings 0` (package.json `lint`) |
 | `typecheck` | `tsc --noEmit` |
-| `test` | the render tests in `tests/` under React 18 and 19; junit in `render-tests.xml` |
+| `typecheck-wax2` | (after `typecheck`) `tsc --noEmit -p tests/wax2`: the library and tests against npmjs's `@hiveio/wax` 2.x |
+| `test` | the render tests in `tests/` under React 18 and 19, each with the dev-catalog wax and with wax 2.x; junit in `render-tests.xml` |
 | `build` | the published artifact: `tsc && vite build` |
 | `dist-exports` | (after `build`) the files package.json `exports`/`types` name exist in `dist/` |
+| `literal-peers` | (after `build`) package.json `peerDependencies` are literal ranges npm can resolve, not pnpm `catalog:`/`workspace:` references |
 | `no-bundled-react` | (after `build`) `dist/` imports React (`react/jsx-runtime` included) from the consumer rather than carrying a copy |
 
 | Slot | Steps |
@@ -30,7 +32,10 @@ The render tests mount `HealthCheckerComponent` and its dialogs with `@hiveio/wa
 `HealthChecker` stubbed, and fail on any console error or warning. Each React they run
 under is a workspace package (`tests/react18`, `tests/react19`) that installs `react`,
 `react-dom` and `@testing-library/react`; `vitest.config.ts` has one project per package
-aliasing those names to it.
+aliasing those names to it. `tests/wax2` installs npmjs's `@hiveio/wax` 2.x; the
+`react18-wax2` and `react19-wax2` projects alias `@hiveio/wax` to it, and
+`tests/wax2/tsconfig.json` maps it the same way for `typecheck-wax2`. The package's wax
+peer range accepts both the GitLab 1.28.6 release candidate and npmjs's 2.x.
 
 ## The test runtime image (`runtime/`)
 
