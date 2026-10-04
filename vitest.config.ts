@@ -1,21 +1,33 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-const reactFrom = (version: string) => {
-  const dir = (pkg: string) => fileURLToPath(new URL(`./tests/react${version}/node_modules/${pkg}`, import.meta.url));
+const workspacePackage = (name: string) => (pkg: string) =>
+  fileURLToPath(new URL(`./tests/${name}/node_modules/${pkg}`, import.meta.url));
+
+const aliasTo = (dir: (pkg: string) => string, pkg: string) => {
+  const escaped = pkg.replace(/[/]/g, "\\/");
   return [
-    { find: /^react$/, replacement: dir("react") },
-    { find: /^react\/(.*)$/, replacement: `${dir("react")}/$1` },
-    { find: /^react-dom$/, replacement: dir("react-dom") },
-    { find: /^react-dom\/(.*)$/, replacement: `${dir("react-dom")}/$1` },
-    { find: /^@testing-library\/react$/, replacement: dir("@testing-library/react") },
+    { find: new RegExp(`^${escaped}$`), replacement: dir(pkg) },
+    { find: new RegExp(`^${escaped}\\/(.*)$`), replacement: `${dir(pkg)}/$1` },
   ];
 };
 
-const project = (version: string) => ({
+const reactFrom = (version: string) => {
+  const dir = workspacePackage(`react${version}`);
+  return [...aliasTo(dir, "react"), ...aliasTo(dir, "react-dom"), ...aliasTo(dir, "@testing-library/react")];
+};
+
+// Without a wax major the root's @hiveio/wax resolves: the dev-catalog 1.28 release candidate.
+const DEV_WAX_MAJOR = "1";
+const waxFrom = (major?: string) => (major ? aliasTo(workspacePackage(`wax${major}`), "@hiveio/wax") : []);
+
+const project = (version: string, waxMajor?: string) => ({
   extends: true as const,
-  test: { name: `react${version}`, provide: { reactMajor: version } },
-  resolve: { alias: reactFrom(version) },
+  test: {
+    name: waxMajor ? `react${version}-wax${waxMajor}` : `react${version}`,
+    provide: { reactMajor: version, waxMajor: waxMajor ?? DEV_WAX_MAJOR },
+  },
+  resolve: { alias: [...reactFrom(version), ...waxFrom(waxMajor)] },
 });
 
 export default defineConfig({
@@ -33,6 +45,6 @@ export default defineConfig({
         inline: [/@radix-ui\//, /lucide-react/, /react-remove-scroll/, /react-style-singleton/, /use-callback-ref/, /use-sidecar/],
       },
     },
-    projects: [project("18"), project("19")],
+    projects: [project("18"), project("19"), project("18", "2"), project("19", "2")],
   },
 });
