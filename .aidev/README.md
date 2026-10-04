@@ -35,7 +35,7 @@ aliasing those names to it.
 ## The test runtime image (`runtime/`)
 
 The suites run in a container with `--network none` and your uid. The image carries
-Node 22, pnpm (from package.json `packageManager`, through corepack) and a pnpm store
+Node 24, pnpm (from package.json `packageManager`, through corepack) and a pnpm store
 filled with `pnpm fetch`. `pnpm-deps.sh` installs `node_modules` offline from it.
 
 When `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc`, `packageManager` or
