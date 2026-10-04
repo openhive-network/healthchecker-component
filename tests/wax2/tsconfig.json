@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@hiveio/wax": ["./node_modules/@hiveio/wax"],
+      "@hiveio/wax/*": ["./node_modules/@hiveio/wax/*"]
+    }
+  },
+  "include": ["../../src", "../../tests/*.ts", "../../tests/*.tsx"]
+}

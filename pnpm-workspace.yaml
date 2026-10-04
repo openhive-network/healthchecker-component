@@ -1,7 +1,8 @@
-# The render tests run against each React these packages install (vitest.config.ts).
+# The render tests run against each React and @hiveio/wax these packages install (vitest.config.ts).
 packages:
   - "tests/react18"
   - "tests/react19"
+  - "tests/wax2"
 
 catalogs:
   # Can be referenced through "catalog:hiveio-toolset"

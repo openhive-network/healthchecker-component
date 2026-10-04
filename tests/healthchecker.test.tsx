@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { version as reactVersion } from "react";
 import { version as reactDomVersion } from "react-dom";
+import { version as waxVersion } from "@hiveio/wax/package.json";
 import { describe, expect, inject, it, vi } from "vitest";
 import { HealthCheckerComponent, HealthCheckerService } from "../src";
 import type { ApiChecker } from "../src";
@@ -8,6 +9,7 @@ import type { ApiChecker } from "../src";
 declare module "vitest" {
   interface ProvidedContext {
     reactMajor: string;
+    waxMajor: string;
   }
 }
 
@@ -60,10 +62,16 @@ const renderHealthChecker = () => {
   return { service, changeNodeAddress };
 };
 
-describe(`HealthCheckerComponent under React ${inject("reactMajor")}`, () => {
+describe(`HealthCheckerComponent under React ${inject("reactMajor")} and wax ${inject("waxMajor")}`, () => {
   it("runs on the React version of its project", () => {
     expect(reactVersion.split(".")[0]).toBe(inject("reactMajor"));
     expect(reactDomVersion.split(".")[0]).toBe(inject("reactMajor"));
+  });
+
+  it("builds on the wax version of its project", async () => {
+    expect(waxVersion.split(".")[0]).toBe(inject("waxMajor"));
+    const actual = await vi.importActual<typeof import("@hiveio/wax")>("@hiveio/wax");
+    expect(actual.HealthChecker).toBeTypeOf("function");
   });
 
   it("lists the providers with the selected one first", () => {

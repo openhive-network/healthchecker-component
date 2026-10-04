@@ -1,0 +1,8 @@
+{
+  "name": "healthchecker-component-tests-wax2",
+  "private": true,
+  "description": "npmjs's @hiveio/wax 2.x, which tsconfig.json here and vitest.config.ts's wax2 project build the library against",
+  "dependencies": {
+    "@hiveio/wax": "2.0.2"
+  }
+}

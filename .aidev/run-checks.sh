@@ -5,11 +5,14 @@
 #   .aidev/run-checks.sh <suite> <step>...     steps: lint typecheck test build
 #
 #   lint       ESLint with --max-warnings 0 (package.json `lint`)
-#   typecheck  tsc --noEmit for the library and its config files
-#   test       the render tests (tests/) under React 18 and 19, junit in
+#   typecheck  tsc --noEmit for the library and its config files, then again
+#              against npmjs's @hiveio/wax 2.x (tests/wax2/tsconfig.json)
+#   test       the render tests (tests/) under React 18 and 19, each with the
+#              dev-catalog wax and with wax 2.x, junit in
 #              test-results/<suite>/render-tests.xml
 #   build      the published artifact: `tsc && vite build`, then the files
 #              package.json `exports` / `types` point at must exist in dist/,
+#              peerDependencies must be literal ranges (no catalog:/workspace:),
 #              and dist/ must not carry a copy of React (it comes from the consumer)
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -51,6 +54,15 @@ if (missing.length) { console.error("missing from the build:", missing.join(", "
 console.log("dist provides", want.join(", "));'
 }
 
+# npm publishes peerDependencies verbatim, and npm users can't resolve pnpm's catalog:/workspace: protocols.
+check_literal_peers() {
+    node -e '
+const peers = require("./package.json").peerDependencies || {};
+const bad = Object.entries(peers).filter(([, range]) => /^(catalog|workspace):/.test(range));
+if (bad.length) { console.error("peerDependencies need literal ranges:", bad.map(([n, r]) => n + "@" + r).join(", ")); process.exit(1); }
+console.log("peerDependencies", JSON.stringify(peers));'
+}
+
 # React's internals, its element tag and the jsx-runtime license header only reach dist/
 # when a react entry point is bundled instead of imported from the consumer.
 check_no_bundled_react() {
@@ -65,9 +77,9 @@ check_no_bundled_react() {
 for s in "$@"; do
     case "$s" in
         lint) step lint pnpm exec eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 ;;
-        typecheck) step typecheck pnpm exec tsc --noEmit ;;
+        typecheck) step typecheck pnpm exec tsc --noEmit && step typecheck-wax2 pnpm exec tsc --noEmit -p tests/wax2 ;;
         test) step test pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit="$out/render-tests.xml" ;;
-        build) step build bash -c 'rm -rf dist && pnpm exec tsc && pnpm exec vite build' && step dist-exports check_dist && step no-bundled-react check_no_bundled_react ;;
+        build) step build bash -c 'rm -rf dist && pnpm exec tsc && pnpm exec vite build' && step dist-exports check_dist && step literal-peers check_literal_peers && step no-bundled-react check_no_bundled_react ;;
         *) echo "unknown step: $s" >&2; exit 2 ;;
     esac
 done
