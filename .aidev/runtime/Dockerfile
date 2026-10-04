@@ -3,7 +3,7 @@
 # install needs is in the image: Node, pnpm (pinned by package.json's
 # `packageManager`, installed through corepack) and a pnpm store filled from the
 # lockfile. Build and pin it with .aidev/runtime/build.sh; see .aidev/README.md.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c
+FROM node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
 
 ENV HOME=/tmp \
     COREPACK_HOME=/opt/corepack \
