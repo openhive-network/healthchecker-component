@@ -24,8 +24,9 @@ workflow:
     - if: $CI_COMMIT_BRANCH
 
 include:
+  # develop: job images (and their Node) are the ones ccc currently publishes
   - project: 'hive/common-ci-configuration'
-    ref: 6c8acc61845915a0c7c7f44d7f59d8dcdb5a5483
+    ref: develop
     file:
       - '/templates/npm_projects.gitlab-ci.yml'
 
@@ -64,7 +65,6 @@ deploy_production_public_npm:
     - .registry_npmjs_org_deploy_package_template
   stage: deploy
   variables:
-    NPM_PUBLISH_TOKEN: "$INTERNAL_HIDDEN_PUBLISH_TOKEN"
     NPM_PACKAGE_NAME: "healthchecker-component"
     DIST_DIR: "$CI_PROJECT_DIR/dist"
   needs:
