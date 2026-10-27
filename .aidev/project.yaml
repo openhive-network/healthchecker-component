@@ -33,7 +33,7 @@ branches:
 environment:
   kind: "container"
   image: "registry.gitlab.syncad.com/hive/healthchecker-component/aidev-tests@sha256:09ed67f374c283f465da0083f46da65240a3c36b7edb304ad4f9165d96babc41"
-  inputs: ["pnpm-lock.yaml"]
+  inputs: ["pnpm-lock.yaml", ".aidev/runtime/Dockerfile"]
 
 issues:
   intake_label: todo

@@ -41,12 +41,15 @@ release candidate and npmjs's 2.x.
 
 ## The test runtime image (`runtime/`)
 
-The suites run in a container with `--network none` and your uid. The image carries
-Node 24, pnpm (from package.json `packageManager`, through corepack) and a pnpm store
-filled with `pnpm fetch`. `pnpm-deps.sh` installs `node_modules` offline from it.
+The suites run in a container with `--network none` and your uid. The image is built
+on common-ci-configuration's `node-test-tools:develop`, the image CI runs, so Node and
+pnpm are the versions ccc's `docker-bake.hcl` defines (this repository pins neither),
+and adds a pnpm store filled with `pnpm fetch`. `pnpm-deps.sh` installs `node_modules`
+offline from it.
 
-When `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc`, `packageManager` or
-`runtime/Dockerfile` change, rebuild and re-pin **in the same commit**:
+When `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.npmrc` or `runtime/Dockerfile` change,
+or `node-test-tools:develop` moves (a ccc Node or pnpm bump), rebuild and re-pin **in
+the same commit**:
 
 ```bash
 .aidev/runtime/build.sh --push   # registry digest if aidev-<input hash> exists, else build + push
