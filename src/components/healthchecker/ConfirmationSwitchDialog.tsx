@@ -29,7 +29,7 @@ const ConfirmationSwitchDialog: React.FC<ConfirmationSwitchDialogProps> = ({
         </DialogHeader>
         <div className="text-sm sm:text-base">
           Are you sure you want to switch to unconfirmed{" "}
-          <span className="font-semibold break-words">{providerLink}</span>?
+          <span className="font-semibold wrap-break-word">{providerLink}</span>?
         </div>
         <DialogFooter>
           <Button onClick={() => onDialogOpenChange(false)} variant="outline">

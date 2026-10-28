@@ -16,7 +16,7 @@ the failure body.
 | `lint` | ESLint, `--max-warnings 0` (package.json `lint`) |
 | `typecheck` | `tsc --noEmit` |
 | `typecheck-wax2` | (after `typecheck`) `tsc --noEmit -p tests/wax2`: the library and tests against npmjs's `@hiveio/wax` 2.x |
-| `test` | the render tests in `tests/` under React 18 and 19, each with the dev-catalog wax and with wax 2.x; junit in `render-tests.xml` |
+| `test` | the render tests in `tests/` under React 18 and 19, each with ccc's catalog wax and with wax 2.x; junit in `render-tests.xml` |
 | `build` | the published artifact: `tsc && vite build` |
 | `dist-exports` | (after `build`) the files package.json `exports`/`types` name exist in `dist/` |
 | `literal-peers` | (after `build`) package.json `peerDependencies` are literal ranges npm can resolve, not pnpm `catalog:`/`workspace:` references |
@@ -35,9 +35,21 @@ under is a workspace package (`tests/react18`, `tests/react19`) that installs `r
 aliasing those names to it. `tests/wax2` installs npmjs's `@hiveio/wax` 2.x; the
 `react18-wax2` and `react19-wax2` projects alias `@hiveio/wax` to it, and
 `tests/wax2/tsconfig.json` maps it the same way for `typecheck-wax2`, compiling `src/`
-and the render tests against wax 2.x instead of the dev-catalog version the root
-`tsconfig.json` resolves. The package's wax peer range accepts both the GitLab 1.28.6
-release candidate and npmjs's 2.x.
+and the render tests against wax 2.x instead of the ccc-catalog version the root
+`tsconfig.json` resolves. The package's wax peer range accepts the GitLab 1.28.6 release
+candidate, ccc's 1.28.8 `-stable` builds and npmjs's 2.x.
+
+## Catalogs
+
+`pnpm-workspace.yaml` carries common-ci-configuration's pnpm catalogs between its
+`BEGIN`/`END common-ci-configuration catalogs` markers, merged from the `npm-common-config`
+submodule (ccc `develop`). After a ccc catalog bump, update the submodule and re-merge:
+
+```bash
+git submodule update --remote npm-common-config
+python3 npm-common-config/scripts/python/pnpm-catalog-sync.py
+pnpm install   # then rebuild and re-pin the runtime image (below)
+```
 
 ## The test runtime image (`runtime/`)
 

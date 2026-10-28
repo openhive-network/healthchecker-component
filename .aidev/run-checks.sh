@@ -8,7 +8,7 @@
 #   typecheck  tsc --noEmit for the library and its config files, then again
 #              against npmjs's @hiveio/wax 2.x (tests/wax2/tsconfig.json)
 #   test       the render tests (tests/) under React 18 and 19, each with the
-#              dev-catalog wax and with wax 2.x, junit in
+#              ccc-catalog wax and with wax 2.x, junit in
 #              test-results/<suite>/render-tests.xml
 #   build      the published artifact: `tsc && vite build`, then the files
 #              package.json `exports` / `types` point at must exist in dist/,

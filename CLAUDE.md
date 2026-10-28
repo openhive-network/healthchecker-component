@@ -13,10 +13,10 @@ Published as `@hiveio/healthchecker-component` to GitLab package registry and np
 
 ## Tech Stack
 
-- **Language:** TypeScript 5.2.2 (strict mode)
+- **Language:** TypeScript 5.9 (ccc `typescript-toolset`, strict mode)
 - **Framework:** React 18.2+ or 19 (peer dependency; never bundled, `vite.config.ts` externalises every peer subpath such as `react/jsx-runtime`)
 - **Build:** Vite 5.2.0 (library mode, ES modules only)
-- **Styling:** Tailwind CSS 3.4.12, shadcn/ui components, Radix UI primitives
+- **Styling:** Tailwind CSS 4 (ccc `tailwind-toolset`), shadcn/ui components, Radix UI primitives
 - **Icons:** Lucide React
 - **Core Dependency:** @hiveio/wax (health checking library)
 - **Package Manager:** pnpm 10.13.1+
@@ -74,7 +74,7 @@ pnpm preview         # Preview production build
 | `src/components/healthchecker/HealthCheckerService.ts` | EventTarget-based service class |
 | `vite.config.ts` | Library build config (ESM only, externals) |
 | `tsconfig.json` | TypeScript strict mode config |
-| `tailwind.config.js` | Tailwind CSS config |
+| `pnpm-workspace.yaml` | Test workspace packages + ccc's catalogs (merged from `npm-common-config`) |
 | `.npmrc` | GitLab package registry for @hiveio scope |
 
 ## Coding Conventions

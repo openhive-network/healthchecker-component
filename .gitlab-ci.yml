@@ -7,6 +7,10 @@ variables:
   GIT_DEPTH: 0
   GIT_STRATEGY: clone
   GIT_SUBMODULE_STRATEGY: recursive
+  # npm-common-config tracks ccc's develop, so a ccc catalog bump reaches the next pipeline
+  GIT_SUBMODULE_UPDATE_FLAGS: --remote
+  # The npm job templates merge the submodule's catalogs into pnpm-workspace.yaml before installing
+  CCC_SUBMODULE_DIR: "npm-common-config"
 
 # Branch pipelines (what the Workflows/Branch-Pipelines template did), except for
 # AIDEV-driven development: ai/<issue>-..., session/<name> and aidev/integration
@@ -39,6 +43,10 @@ lint:
   extends: .npm_based_job_base
   script:
     - npm run lint-ci
+
+pnpm_catalog_check:
+  extends: .pnpm_catalog_check
+  stage: .pre
 
 build:
   stage: build
