@@ -17,7 +17,7 @@ const reactFrom = (version: string) => {
   return [...aliasTo(dir, "react"), ...aliasTo(dir, "react-dom"), ...aliasTo(dir, "@testing-library/react")];
 };
 
-// Without a wax major the root's @hiveio/wax resolves: the dev-catalog 1.28 release candidate.
+// Without a wax major the root's @hiveio/wax resolves: ccc's hiveio-toolset 1.28 build.
 const DEV_WAX_MAJOR = "1";
 const waxFrom = (major?: string) => (major ? aliasTo(workspacePackage(`wax${major}`), "@hiveio/wax") : []);
 

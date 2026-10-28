@@ -56,14 +56,14 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
         "relative flex flex-col gap-2 my-1 p-2 dark:text-white",
         "lg:flex-row lg:flex-wrap lg:items-center",
         {
-          "outline outline-2 outline-offset-2 mb-6": isTop,
+          "outline-solid outline-2 outline-offset-2 mb-6": isTop,
         }
       )}
     >
       {!isSelected && (
         <div className="absolute top-0 right-2">
           <Button
-            className="p-1 rounded"
+            className="p-1 rounded-sm"
             onClick={() => deleteProvider(providerLink)}
             variant="ghost"
           >
@@ -153,7 +153,7 @@ const ProviderCard: React.FC<ProviderCardProps> = ({
           <div className="flex w-full items-end justify-center text-center">
             {!isSelected ? (
               <Button
-                className="hover:bg-slate-400 rounded w-full max-w-[200px]"
+                className="hover:bg-slate-400 rounded-sm w-full max-w-[200px]"
                 onClick={() => switchToProvider(providerLink)}
                 data-testid="hc-set-api-button"
               >

@@ -20,15 +20,14 @@ For proper work of HealthChecker component you need React and Tailwind installed
 @hiveio:registry=https://gitlab.syncad.com/api/v4/groups/136/-/packages/npm/
 ```
 
-After installing the newest version of component into your project, add this to your `tailwind.config.js` content field:
+The component ships Tailwind CSS 4 class names, not a stylesheet. After installing the newest version of component into your project, point Tailwind at it from the CSS file that imports Tailwind (the path is relative to that file):
 
 ```
-  content: [
-    "./node_modules/@hiveio/healthchecker-component/**/*.{ts,tsx,js,jsx}"
-  ],
+@import "tailwindcss";
+@source "../node_modules/@hiveio/healthchecker-component/dist";
 ```
 
-That way Tailwind can use style from component in your application.
+That way Tailwind can use style from component in your application. Tailwind 4's default border color is `currentcolor`; the component's bordered elements take your application's base border color (e.g. shadcn's `* { @apply border-border; }`).
 
 You can install HealthChecker component with `pnpm` (recommended).
 
