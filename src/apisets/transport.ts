@@ -14,6 +14,7 @@ export interface RestResponse {
 /**
  * How probes reach a node. Implementations throw {@link TransportError} when the node could not be
  * reached or answered with something that is not an API answer (network failure, timeout, 5xx).
+ * A JSON-RPC error answer is returned whatever its HTTP status, so the caller can classify it.
  */
 export interface ApiTransport {
   jsonRpc(node: string, method: string, params: unknown, timeoutMs: number): Promise<JsonRpcResponse>;
@@ -75,11 +76,19 @@ export const fetchTransport: ApiTransport = {
       },
       timeoutMs,
     );
-    if (!response.ok) throw new TransportError(`${node}: HTTP ${response.status}`, response.status);
     const body = await readBody(response);
-    if (typeof body !== "object" || body === null || !("result" in body || "error" in body))
-      throw new TransportError(`${node}: not a JSON-RPC answer`, response.status);
-    return body as JsonRpcResponse;
+    if (response.ok) {
+      if (typeof body !== "object" || body === null || !("result" in body || "error" in body))
+        throw new TransportError(`${node}: not a JSON-RPC answer`, response.status);
+      return body as JsonRpcResponse;
+    }
+    const error = typeof body === "object" && body !== null ? (body as { error?: unknown }).error : undefined;
+    const isErrorAnswer = typeof error === "object" && error !== null;
+    // A JSON-RPC POST to a path nothing is routed to: the node does not serve the method.
+    if (response.status === 404 && !(isErrorAnswer && isApiNotFound(error)))
+      return { error: { code: JSON_RPC_METHOD_NOT_FOUND, message: `HTTP 404: method not found` } };
+    if (isErrorAnswer) return { error: error as JsonRpcError };
+    throw new TransportError(`${node}: HTTP ${response.status}`, response.status);
   },
   async restGet(node, path, timeoutMs) {
     const response = await fetchWithTimeout(joinUrl(node, path), { method: "GET" }, timeoutMs);

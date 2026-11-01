@@ -1,4 +1,4 @@
-import { ApiTransport, isApiNotFound, JsonRpcError } from "./transport";
+import { ApiTransport, isApiNotFound, JsonRpcError, RestResponse, TransportError } from "./transport";
 
 export type ProbeResult = { supported: true; features?: string[] } | { supported: false; reason: string };
 
@@ -21,6 +21,20 @@ export class ProbeFailedError extends Error {
     this.name = "ProbeFailedError";
   }
 }
+
+/**
+ * The node's router has the API's route but nothing behind it (HTTP 502/503). The engine counts it as a
+ * failed probe until it repeats `downAfterFailures` times on a node that serves another set, then as
+ * unsupported (see `timing.noBackendRecheckMs`).
+ */
+export class NoBackendError extends ProbeFailedError {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoBackendError";
+  }
+}
+
+const NO_BACKEND_STATUSES = [502, 503];
 
 /**
  * Supported when `jsonrpc.get_methods` lists a method of `namespace`; the features are its method names.
@@ -58,11 +72,20 @@ export const jsonRpcMethodProbe = <T = unknown>(
 
 /**
  * Supported when a GET of `path` (an API root or its OpenAPI spec) succeeds; unsupported on 404 or
- * PostgREST's PGRST202 (no such function).
+ * PostgREST's PGRST202 (no such function). Rejects with {@link NoBackendError} on HTTP 502/503.
  */
 export const restProbe = <T = unknown>(path: string, features?: (body: T) => string[]): ApiProbe =>
   async ({ node, transport, timeoutMs }) => {
-    const { status, body } = await transport.restGet(node, path, timeoutMs);
+    let answer: RestResponse;
+    try {
+      answer = await transport.restGet(node, path, timeoutMs);
+    } catch (error) {
+      if (error instanceof TransportError && error.status !== undefined && NO_BACKEND_STATUSES.includes(error.status))
+        throw new NoBackendError(`${path}: HTTP ${error.status}, no backend`);
+      throw error;
+    }
+    const { status, body } = answer;
+    if (NO_BACKEND_STATUSES.includes(status)) throw new NoBackendError(`${path}: HTTP ${status}, no backend`);
     if (status === 404 || isApiNotFound(body)) return { supported: false, reason: `${path}: HTTP ${status}` };
     if (status < 200 || status >= 300) throw new ProbeFailedError(`${path}: HTTP ${status}`);
     return { supported: true, features: features?.(body as T) };
