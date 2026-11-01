@@ -16,7 +16,7 @@ the failure body.
 | `lint` | ESLint, `--max-warnings 0` (package.json `lint`) |
 | `typecheck` | `tsc --noEmit` |
 | `typecheck-wax2` | (after `typecheck`) `tsc --noEmit -p tests/wax2`: the library and tests against npmjs's `@hiveio/wax` 2.x |
-| `test` | the render tests in `tests/` under React 18 and 19, each with ccc's catalog wax and with wax 2.x; junit in `render-tests.xml` |
+| `test` | the tests in `tests/` (the `ApiSetEngine` unit tests under Node with stubbed transports, and the render tests) under React 18 and 19, each with ccc's catalog wax and with wax 2.x; junit in `render-tests.xml` |
 | `build` | the published artifact: `tsc && vite build` |
 | `dist-exports` | (after `build`) the files package.json `exports`/`types` name exist in `dist/` |
 | `literal-peers` | (after `build`) package.json `peerDependencies` are literal ranges npm can resolve, not pnpm `catalog:`/`workspace:` references |
@@ -28,8 +28,11 @@ the failure body.
 | static | lint, typecheck |
 | baseline, coverage, system | build |
 
-The render tests mount `HealthCheckerComponent` and its dialogs with `@hiveio/wax`'s
-`HealthChecker` stubbed, and fail on any console error or warning. Each React they run
+The render tests mount `HealthCheckerComponent`, its dialogs and `ApiSetsComponent` with
+`@hiveio/wax`'s `HealthChecker` stubbed, and fail on any console error or warning.
+`tests/apiSetEngine.test.ts` runs the headless `ApiSetEngine` in vitest's `node`
+environment (no `window`), with a stubbed transport (`tests/stubTransport.ts`) instead of
+the network. Each React they run
 under is a workspace package (`tests/react18`, `tests/react19`) that installs `react`,
 `react-dom` and `@testing-library/react`; `vitest.config.ts` has one project per package
 aliasing those names to it. `tests/wax2` installs npmjs's `@hiveio/wax` 2.x; the

@@ -7,7 +7,8 @@
 #   lint       ESLint with --max-warnings 0 (package.json `lint`)
 #   typecheck  tsc --noEmit for the library and its config files, then again
 #              against npmjs's @hiveio/wax 2.x (tests/wax2/tsconfig.json)
-#   test       the render tests (tests/) under React 18 and 19, each with the
+#   test       the tests (tests/: the ApiSetEngine unit tests under Node, the
+#              render tests) under React 18 and 19, each with the
 #              ccc-catalog wax and with wax 2.x, junit in
 #              test-results/<suite>/render-tests.xml
 #   build      the published artifact: `tsc && vite build`, then the files

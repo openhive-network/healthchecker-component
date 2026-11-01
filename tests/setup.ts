@@ -9,7 +9,8 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
-  window.localStorage.clear();
+  // The headless engine's tests run in Node, where there is no window.
+  if (typeof window !== "undefined") window.localStorage.clear();
   const errors = vi.mocked(console.error).mock.calls;
   const warnings = vi.mocked(console.warn).mock.calls;
   vi.restoreAllMocks();

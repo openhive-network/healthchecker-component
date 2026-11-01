@@ -35,7 +35,7 @@ export default defineConfig({
   resolve: { mainFields: ["module", "main"] },
   test: {
     environment: "jsdom",
-    include: ["tests/**/*.test.tsx"],
+    include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["tests/setup.ts"],
     // Node resolves `react` from an external dependency's own location, past the alias, so
     // the bundled UI dependencies that import React go through Vite. The packages installed
