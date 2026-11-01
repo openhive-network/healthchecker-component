@@ -341,6 +341,9 @@ describe("ApiSetEngine", () => {
         "Node URLs must not contain user info: https://api.syncad.com/",
       );
       expect(() => setup({ preferences: { bridge: ["wss://api.hive.blog"] } })).toThrow("Not an http(s) node URL: wss://api.hive.blog");
+      expect(() => setup({ nodes: [HIVE, "ftp://user:s3cret@api.syncad.com"] })).toThrow(/^Not an http\(s\) node URL: ftp:\/\/\*\*\*@api\.syncad\.com$/);
+      expect(() => setup({ nodes: [HIVE, "https://user:s3cret@api syncad.com"] })).toThrow(/^Not an http\(s\) node URL: https:\/\/\*\*\*@api syncad\.com$/);
+      expect(() => setup({ preferences: { bridge: ["user:s3cret@api.syncad.com", HIVE] } })).toThrow(/^Not an http\(s\) node URL: \*\*\*@api\.syncad\.com$/);
     });
   });
 
@@ -616,6 +619,30 @@ describe("ApiSetEngine", () => {
         expect(request.bestNode("bridge")).toBe(shared.engine.bestNode("bridge"));
         expect(request.bestNode("lite")).toBe(SYNCAD);
         expect(states(request.rankings("lite"))).toEqual({ [HIVE]: "unsupported", [SYNCAD]: "eligible", [CUSTOM]: "unknown", [OPENHIVE]: "unknown" });
+      });
+
+      it("ignores reports on a per-request engine, so a cookie's node is never promoted; the shared engine takes them", async () => {
+        const shared = await serverEngine();
+        const user = setup({ sets, preferences: sameRank, stubs: { [HIVE]: hiveBlog(), [SYNCAD]: syncad(), [CUSTOM]: syncad() } });
+        await user.engine.refresh();
+        user.engine.addNode(CUSTOM);
+        await user.engine.refresh();
+        expect(user.engine.select("lite", CUSTOM)).toBe(true);
+
+        const request = ApiSetEngine.forRequest(shared, user.engine.serialize());
+        const before = request.rankings("lite");
+        expect(request.bestNode("lite")).toBe(SYNCAD);
+        expect(request.report("lite", CUSTOM, { ok: true, latencyMs: 10 })).toBe(false);
+        expect(request.report("lite", HIVE, { ok: true, latencyMs: 10 })).toBe(false);
+        expect(request.report("lite", SYNCAD, { ok: false, error: "transport" })).toBe(false);
+        expect(request.bestNode("lite")).toBe(SYNCAD);
+        expect(request.rankings("lite")).toEqual(before);
+        expect(states(request.rankings("lite"))).toEqual({ [HIVE]: "unsupported", [SYNCAD]: "eligible", [CUSTOM]: "unknown" });
+
+        expect(shared.report("lite", CUSTOM, { ok: true })).toBe(false);
+        expect(shared.report("lite", HIVE, { ok: true, latencyMs: 10 })).toBe(true);
+        expect(ranking(shared, "lite", HIVE)?.state).toBe("eligible");
+        expect(shared.bestNode("lite")).toBe(HIVE);
       });
 
       describe("with the browser's clock off the server's by 45 min", () => {
