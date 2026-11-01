@@ -26,12 +26,15 @@ Published as `@hiveio/healthchecker-component` to GitLab package registry and np
 ```
 src/
 ├── index.ts                     # Main entry, exports public API
+├── engine.ts                    # `/engine` subpath: the API-set engine without React (servers, SSR)
 ├── apisets/                     # Headless API-set engine (no React, no window)
 │   ├── ApiSetEngine.ts          # Per-set eligibility, defaults, rankings, user choice
 │   ├── defaults.ts              # Pure, deterministic default-node choice (preference, stickiness, groups)
 │   ├── probes.ts                # Capability probes: JSON-RPC namespace/method, REST path
 │   ├── transport.ts             # ApiTransport (fetch by default), TransportError, isApiNotFound
+│   ├── nodeUrl.ts               # Node URL normalisation (scheme/host case, trailing slash)
 │   ├── selection.ts             # Cookie-safe serialize/parse of the user's choices
+│   ├── snapshot.ts              # Validating reader of an engine's health snapshot (SSR → browser)
 │   ├── storage.ts               # SelectionStorage adapters (memory, localStorage)
 │   ├── stats.ts                 # Rolling latency/outcome samples
 │   └── types.ts                 # ApiSet, NodeRanking, options and events
@@ -74,7 +77,7 @@ pnpm test            # Engine (Node) and render tests (tests/) under React 18 an
 pnpm preview         # Preview production build
 ```
 
-**Build Output:** `dist/healthchecker-component.es.js` + `dist/index.d.ts`
+**Build Output:** `dist/healthchecker-component.es.js` + `dist/index.d.ts`; the `/engine` subpath is `dist/engine.es.js` + `dist/engine.d.ts` (`.aidev/check-engine-entry.mjs` checks it imports in Node without React)
 
 ## Key Files
 

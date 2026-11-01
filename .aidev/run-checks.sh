@@ -13,6 +13,7 @@
 #              test-results/<suite>/render-tests.xml
 #   build      the published artifact: `tsc && vite build`, then the files
 #              package.json `exports` / `types` point at must exist in dist/,
+#              the /engine entry must import in Node without React or the UI libraries,
 #              peerDependencies must be literal ranges (no catalog:/workspace:),
 #              and dist/ must not carry a copy of React (it comes from the consumer)
 set -uo pipefail
@@ -80,7 +81,7 @@ for s in "$@"; do
         lint) step lint pnpm exec eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 ;;
         typecheck) step typecheck pnpm exec tsc --noEmit && step typecheck-wax2 pnpm exec tsc --noEmit -p tests/wax2 ;;
         test) step test pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit="$out/render-tests.xml" ;;
-        build) step build bash -c 'rm -rf dist && pnpm exec tsc && pnpm exec vite build' && step dist-exports check_dist && step literal-peers check_literal_peers && step no-bundled-react check_no_bundled_react ;;
+        build) step build bash -c 'rm -rf dist && pnpm exec tsc && pnpm exec vite build' && step dist-exports check_dist && step engine-entry node .aidev/check-engine-entry.mjs && step literal-peers check_literal_peers && step no-bundled-react check_no_bundled_react ;;
         *) echo "unknown step: $s" >&2; exit 2 ;;
     esac
 done

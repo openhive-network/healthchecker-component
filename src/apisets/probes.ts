@@ -22,7 +22,12 @@ export class ProbeFailedError extends Error {
   }
 }
 
-/** Supported when `jsonrpc.get_methods` lists a method of `namespace`; the features are its method names. */
+/**
+ * Supported when `jsonrpc.get_methods` lists a method of `namespace`; the features are its method names.
+ * Only for hived's own namespaces (`database_api`, `rc_api`, …): `get_methods` is answered by hived and
+ * never lists the APIs other apps serve behind the node's router (`bridge`, `hive`, `lite`,
+ * `hivesense_api`). Probe those with {@link jsonRpcApiProbe}.
+ */
 export const jsonRpcNamespaceProbe = (namespace: string): ApiProbe => async ({ node, transport, timeoutMs }) => {
   const response = await transport.jsonRpc(node, "jsonrpc.get_methods", {}, timeoutMs);
   if (response.error) throw new ProbeFailedError(`jsonrpc.get_methods: ${response.error.message}`);
@@ -62,3 +67,14 @@ export const restProbe = <T = unknown>(path: string, features?: (body: T) => str
     if (status < 200 || status >= 300) throw new ProbeFailedError(`${path}: HTTP ${status}`);
     return { supported: true, features: features?.(body as T) };
   };
+
+/**
+ * Supported unless the node says it does not serve the API (see `isApiNotFound`). Any other answer of
+ * `method`, a result or the API's own error (bad arguments, a failed assert such as "Post … does not
+ * exist"), shows the API is there; so `method` should be cheap, e.g. `bridge.get_post` of a post that
+ * does not exist.
+ */
+export const jsonRpcApiProbe = (method: string, params: unknown = {}): ApiProbe => async ({ node, transport, timeoutMs }) => {
+  const response = await transport.jsonRpc(node, method, params, timeoutMs);
+  return response.error && isApiNotFound(response.error) ? { supported: false, reason: response.error.message } : { supported: true };
+};

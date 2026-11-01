@@ -1,19 +1,16 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ApiSetEngine, ApiSetsComponent, jsonRpcMethodProbe, jsonRpcNamespaceProbe } from "../src";
-import { HIVE, liteInfo, liteNotFound, methods, stubTransport, SYNCAD } from "./stubTransport";
+import { ApiSetEngine, ApiSetsComponent, jsonRpcApiProbe, jsonRpcMethodProbe } from "../src";
+import { BRIDGE_PROBE, HIVE, hiveBlog, stubTransport, SYNCAD, syncad } from "./stubTransport";
 
 vi.mock("@hiveio/wax", () => ({ HealthChecker: class {} }));
 
 const renderApiSets = async () => {
-  const { transport } = stubTransport({
-    [HIVE]: { rpc: { "jsonrpc.get_methods": methods("bridge.get_post"), "lite.get_info": liteNotFound } },
-    [SYNCAD]: { rpc: { "jsonrpc.get_methods": methods("bridge.get_post", "lite.get_info"), "lite.get_info": liteInfo } },
-  });
+  const { transport } = stubTransport({ [HIVE]: hiveBlog(), [SYNCAD]: syncad() });
   const engine = new ApiSetEngine({
     nodes: [HIVE, SYNCAD],
     sets: [
-      { id: "bridge", title: "Bridge", probe: jsonRpcNamespaceProbe("bridge"), group: "hivemind" },
+      { id: "bridge", title: "Bridge", probe: jsonRpcApiProbe(BRIDGE_PROBE.method, BRIDGE_PROBE.params), group: "hivemind" },
       { id: "lite", title: "Lite accounts", probe: jsonRpcMethodProbe("lite.get_info"), group: "hivemind" },
     ],
     transport,
