@@ -92,6 +92,8 @@ export interface EngineTiming {
   downCooldownMs: number;
   /** How long an `unsupported` answer is trusted. */
   unsupportedTtlMs: number;
+  /** How long a set found unsupported because its route has no backend (HTTP 502/503) waits for its next probe. */
+  noBackendRecheckMs: number;
   freshnessIntervalMs: number;
   /** How often `start()` looks for due probes. */
   tickMs: number;
@@ -119,7 +121,10 @@ export interface ApiSetEngineOptions {
   timing?: Partial<EngineTiming>;
   /** A candidate replaces the current default only when this much faster (0.2 = 20%). */
   stickinessMargin?: number;
-  /** Consecutive transport failures that make an eligible node `down`. */
+  /**
+   * Consecutive transport failures that make an eligible node `down`; also the consecutive no-backend
+   * probes (HTTP 502/503) that make a set `unsupported` on a node eligible for another set.
+   */
   downAfterFailures?: number;
   /** Error rate above which an eligible node ranks degraded. */
   maxErrorRate?: number;

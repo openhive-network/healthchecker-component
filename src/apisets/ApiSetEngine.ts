@@ -1,6 +1,7 @@
 import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax";
 import { Availability, Candidate, chooseDefaults, compareCandidates } from "./defaults";
 import { canonicalNodeUrl, normalizeNodeUrl, requireNodeUrl } from "./nodeUrl";
+import { NoBackendError } from "./probes";
 import { parseSelection, serializeSelection } from "./selection";
 import { readSnapshot } from "./snapshot";
 import { NodeStats } from "./stats";
@@ -24,6 +25,7 @@ const DEFAULT_TIMING: EngineTiming = {
   eligibleRecheckMs: 10 * 60_000,
   downCooldownMs: 30_000,
   unsupportedTtlMs: 6 * 60 * 60_000,
+  noBackendRecheckMs: 60 * 60_000,
   freshnessIntervalMs: 60_000,
   tickMs: 15_000,
   snapshotMaxAgeMs: 30 * 60_000,
@@ -44,6 +46,8 @@ interface NodeEntry {
   lastProbeAt?: number;
   freshnessLag?: number;
   freshnessCheckedAt?: number;
+  /** Probes in a row whose route had no backend (see `NoBackendError`). */
+  noBackendProbes: number;
   stats: NodeStats;
 }
 
@@ -468,19 +472,24 @@ export class ApiSetEngine extends EventTarget {
   private async probe(set: ApiSet, node: string, entry: NodeEntry) {
     const context = { node, transport: this.transport, timeoutMs: this.timing.probeTimeoutMs };
     const generation = entry.generation;
-    let answer: { state: NodeState; reason?: string; features?: string[] };
+    let answer: { state: NodeState; reason?: string; features?: string[]; noBackend?: boolean };
     entry.probing = true;
     try {
       const result = await set.probe(context);
       answer = result.supported ? { state: "eligible", features: result.features } : { state: "unsupported", reason: result.reason };
     } catch (error) {
       // A probe that cannot answer says nothing about support: the node is down for the set.
-      answer = { state: "down", reason: errorMessage(error) };
+      answer = { state: "down", reason: errorMessage(error), noBackend: error instanceof NoBackendError };
     } finally {
       entry.probing = false;
     }
     // A report (or snapshot) changed the node's state while the probe ran: its evidence is newer.
     if (entry.generation !== generation) return;
+    entry.noBackendProbes = answer.noBackend ? entry.noBackendProbes + 1 : 0;
+    // A route with no backend, again and again, on a node that is up for another set: the node does not
+    // serve this one. On a node down for every set it is the node that fails, not the route.
+    const noBackend = answer.noBackend && entry.noBackendProbes >= this.downAfterFailures && this.isEligibleElsewhere(set.id, node);
+    if (noBackend) answer = { state: "unsupported", reason: answer.reason };
     switch (answer.state) {
       case "eligible":
         entry.features = answer.features;
@@ -489,7 +498,7 @@ export class ApiSetEngine extends EventTarget {
         break;
       case "unsupported":
         entry.features = undefined;
-        this.setState(entry, "unsupported", answer.reason, this.timing.unsupportedTtlMs);
+        this.setState(entry, "unsupported", answer.reason, noBackend ? this.timing.noBackendRecheckMs : this.timing.unsupportedTtlMs);
         break;
       default:
         this.setState(entry, "down", answer.reason, this.timing.downCooldownMs);
@@ -506,6 +515,10 @@ export class ApiSetEngine extends EventTarget {
       entry.reason = `freshness unknown: ${errorMessage(error)}`;
     }
     entry.freshnessCheckedAt = this.now();
+  }
+
+  private isEligibleElsewhere(setId: string, node: string): boolean {
+    return [...this.entries].some(([id, entries]) => id !== setId && entries.get(node)?.state === "eligible");
   }
 
   /** The longest a node in `state` waits for its next probe. */
@@ -537,7 +550,7 @@ export class ApiSetEngine extends EventTarget {
 
   private track(node: string) {
     for (const entries of this.entries.values())
-      if (!entries.has(node)) entries.set(node, { state: "unknown", generation: 0, probing: false, nextProbeAt: 0, stats: new NodeStats() });
+      if (!entries.has(node)) entries.set(node, { state: "unknown", generation: 0, probing: false, nextProbeAt: 0, noBackendProbes: 0, stats: new NodeStats() });
   }
 
   private persist() {
