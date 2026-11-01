@@ -16,6 +16,7 @@
 #              the /engine entry must import in Node without React or the UI libraries,
 #              peerDependencies must be literal ranges (no catalog:/workspace:),
 #              and dist/ must not carry a copy of React (it comes from the consumer)
+#              and `npm pack` must ship dist/ without a tarball (the publish CI writes one there)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -76,12 +77,34 @@ check_no_bundled_react() {
     [ "$found" -eq 0 ] && echo "dist/ imports React from the consumer"
 }
 
+# The publish CI packs into dist/; `files` must keep that tarball out of the next pack. A stand-in
+# tarball is put there for the dry run, so the check fails if the exclusion goes.
+check_pack_contents() {
+    local decoy=dist/hiveio-healthchecker-component-0.0.0-pack-check.tgz
+    : > "$decoy"
+    local listing rc=0 cache
+    cache=$(mktemp -d)
+    listing=$(npm pack --dry-run --json --ignore-scripts --cache "$cache" 2>/dev/null) || rc=$?
+    rm -rf "$decoy" "$cache"
+    [ "$rc" -eq 0 ] || { echo "npm pack --dry-run failed (exit $rc)" >&2; return 1; }
+    node -e '
+const files = JSON.parse(process.argv[1])[0].files.map((f) => f.path);
+const pkg = require("./package.json");
+const want = [pkg.types, ...Object.values(pkg.exports || {}).flatMap((e) => typeof e === "string" ? [e] : Object.values(e))].map((f) => f.replace(/^\.\//, ""));
+const tarballs = files.filter((f) => f.endsWith(".tgz"));
+const missing = want.filter((f) => !files.includes(f));
+if (tarballs.length) console.error("the package ships a tarball:", tarballs.join(", "));
+if (missing.length) console.error("the package lacks:", missing.join(", "));
+if (tarballs.length || missing.length) process.exit(1);
+console.log("the package ships", files.length, "files, no tarball:", files.join(", "));' "$listing"
+}
+
 for s in "$@"; do
     case "$s" in
         lint) step lint pnpm exec eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 ;;
         typecheck) step typecheck pnpm exec tsc --noEmit && step typecheck-wax2 pnpm exec tsc --noEmit -p tests/wax2 ;;
         test) step test pnpm exec vitest run --reporter=default --reporter=junit --outputFile.junit="$out/render-tests.xml" ;;
-        build) step build bash -c 'rm -rf dist && pnpm exec tsc && pnpm exec vite build' && step dist-exports check_dist && step engine-entry node .aidev/check-engine-entry.mjs && step literal-peers check_literal_peers && step no-bundled-react check_no_bundled_react ;;
+        build) step build bash -c 'rm -rf dist && pnpm exec tsc && pnpm exec vite build' && step dist-exports check_dist && step engine-entry node .aidev/check-engine-entry.mjs && step literal-peers check_literal_peers && step no-bundled-react check_no_bundled_react && step pack-contents check_pack_contents ;;
         *) echo "unknown step: $s" >&2; exit 2 ;;
     esac
 done

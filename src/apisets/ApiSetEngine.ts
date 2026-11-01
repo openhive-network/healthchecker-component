@@ -1,6 +1,6 @@
 import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax";
 import { Availability, Candidate, chooseDefaults, compareCandidates } from "./defaults";
-import { canonicalNodeUrl, normalizeNodeUrl } from "./nodeUrl";
+import { canonicalNodeUrl, normalizeNodeUrl, requireNodeUrl } from "./nodeUrl";
 import { parseSelection, serializeSelection } from "./selection";
 import { readSnapshot } from "./snapshot";
 import { NodeStats } from "./stats";
@@ -27,6 +27,7 @@ const DEFAULT_TIMING: EngineTiming = {
   freshnessIntervalMs: 60_000,
   tickMs: 15_000,
   snapshotMaxAgeMs: 30 * 60_000,
+  snapshotClockSkewMs: 5 * 60_000,
 };
 // An error rate from fewer outcomes than this says nothing yet.
 const MIN_OUTCOMES_FOR_ERROR_RATE = 4;
@@ -46,7 +47,8 @@ interface NodeEntry {
   stats: NodeStats;
 }
 
-// The transport of a `forRequest` engine: it must never fetch, least of all a cookie's custom node.
+// The transport and wax factory of a `forRequest` engine, which never probes: unreachable, as its
+// `start()` and `refresh()` do nothing, and refusing should that ever change.
 const noProbeTransport: ApiTransport = {
   jsonRpc: async (node) => {
     throw new TransportError(`${node}: a per-request engine does not probe`);
@@ -54,6 +56,9 @@ const noProbeTransport: ApiTransport = {
   restGet: async (node) => {
     throw new TransportError(`${node}: a per-request engine does not probe`);
   },
+};
+const noHealthChecker = (): HealthChecker => {
+  throw new Error("a per-request engine runs no wax checks");
 };
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -87,24 +92,18 @@ export class ApiSetEngine extends EventTarget {
   private checkers = new Map<string, { checker: HealthChecker; nodes: string }>();
   private timer?: ReturnType<typeof setInterval>;
   private refreshing?: Promise<void>;
+  /** A `forRequest` engine: it never probes, checks or calls the sets' probe and freshness functions. */
+  private readOnly = false;
 
   constructor(options: ApiSetEngineOptions) {
     super();
     this.options = options;
-    this.catalog = [
-      ...new Set(
-        options.nodes.map((node) => {
-          const url = normalizeNodeUrl(node);
-          if (!url) throw new TypeError(`Not an http(s) node URL: ${node}`);
-          return url;
-        }),
-      ),
-    ];
+    this.catalog = [...new Set(options.nodes.map((node) => requireNodeUrl(node)))];
     this.setsById = new Map(options.sets.map((set) => [set.id, set]));
     this.tiers = new Map(
       options.sets.map((set) => {
         const order = options.preferences?.[set.id] ?? this.catalog;
-        const ranks = order.map((rank) => (Array.isArray(rank) ? rank : [rank]).map(canonicalNodeUrl));
+        const ranks = order.map((rank) => (Array.isArray(rank) ? rank : [rank]).map((node) => requireNodeUrl(node)));
         return [set.id, new Map(ranks.flatMap((rank, tier) => rank.map((node) => [node, tier])))];
       }),
     );
@@ -124,14 +123,21 @@ export class ApiSetEngine extends EventTarget {
 
   /**
    * A fresh engine for one server-side request: `shared`'s options and node health (its
-   * {@link snapshot}), and the user's `cookieState` ({@link serialize}d), kept in memory. It never probes:
-   * its transport refuses every call, so a cookie's custom node is never fetched by the server. Such a
+   * {@link snapshot}), and the user's `cookieState` ({@link serialize}d), kept in memory. It is read-only
+   * health-wise: `start()` and `refresh()` do nothing, it runs no wax checks and never calls the sets'
+   * `probe` or `freshness`, so a cookie's custom node is never fetched by the server. Such a
    * node has no health in `shared`'s snapshot, so a choice of it uses `auto` until a browser engine probes
    * it. `shared` is the process's long-lived engine probing the operator catalog only; never `hydrate` a
    * cookie into it or add a cookie's node to it.
    */
   static forRequest(shared: ApiSetEngine, cookieState?: string): ApiSetEngine {
-    const engine = new ApiSetEngine({ ...shared.options, transport: noProbeTransport, storage: memoryStorage() });
+    const engine = new ApiSetEngine({
+      ...shared.options,
+      transport: noProbeTransport,
+      storage: memoryStorage(),
+      createHealthChecker: noHealthChecker,
+    });
+    engine.readOnly = true;
     if (cookieState !== undefined) engine.hydrate(cookieState);
     engine.hydrateSnapshot(shared.snapshot());
     return engine;
@@ -333,14 +339,23 @@ export class ApiSetEngine extends EventTarget {
    * when the snapshot says they are due, at the latest when this engine's timing for their state says so,
    * counted from the snapshot's creation. Returns false (and takes nothing) for an unreadable snapshot, or
    * one older than `timing.snapshotMaxAgeMs`.
+   *
+   * The age compares the snapshot's `createdAt` (the server's clock) with this engine's `now()`. Pass
+   * `clockOffsetMs`, the server's clock minus this engine's (e.g. measured from a response's `Date`
+   * header), to age it exactly. Without it, a snapshot from the future counts as just taken, and one is
+   * ignored only beyond `snapshotMaxAgeMs` plus `timing.snapshotClockSkewMs`. Throws a RangeError for a
+   * `clockOffsetMs` that is not a finite number.
    */
-  hydrateSnapshot(snapshot: unknown): boolean {
+  hydrateSnapshot(snapshot: unknown, options: { clockOffsetMs?: number } = {}): boolean {
+    const { clockOffsetMs } = options;
+    if (clockOffsetMs !== undefined && !Number.isFinite(clockOffsetMs))
+      throw new RangeError(`clockOffsetMs must be a finite number: ${clockOffsetMs}`);
     const parsed = readSnapshot(snapshot);
     if (!parsed) return false;
     const now = this.now();
-    // A snapshot "from the future" is clock skew between server and browser, not a reason to trust it longer.
-    const age = Math.max(0, now - parsed.createdAt);
-    if (age > this.timing.snapshotMaxAgeMs) return false;
+    const age = Math.max(0, now + (clockOffsetMs ?? 0) - parsed.createdAt);
+    const maxAge = this.timing.snapshotMaxAgeMs + (clockOffsetMs === undefined ? this.timing.snapshotClockSkewMs : 0);
+    if (age > maxAge) return false;
     for (const [setId, { default: defaultNode, nodes }] of Object.entries(parsed.sets)) {
       const entries = this.entries.get(setId);
       if (!entries) continue;
@@ -392,8 +407,9 @@ export class ApiSetEngine extends EventTarget {
 
   // Lifecycle
 
-  /** Probes now, then keeps probing what is due and runs the sets' wax checks until `stop()`. */
+  /** Probes now, then keeps probing what is due and runs the sets' wax checks until `stop()`. Does nothing on a `forRequest` engine. */
   start(): Promise<void> {
+    if (this.readOnly) return Promise.resolve();
     if (!this.timer) {
       this.timer = setInterval(() => void this.refresh(), this.timing.tickMs);
       (this.timer as { unref?: () => void }).unref?.();
@@ -408,8 +424,9 @@ export class ApiSetEngine extends EventTarget {
     this.checkers.clear();
   }
 
-  /** One round: the due probes and freshness probes, all in parallel. */
+  /** One round: the due probes and freshness probes, all in parallel. Does nothing on a `forRequest` engine. */
   refresh(): Promise<void> {
+    if (this.readOnly) return Promise.resolve();
     this.refreshing ??= this.runRound().finally(() => {
       this.refreshing = undefined;
     });
