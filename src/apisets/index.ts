@@ -1,5 +1,5 @@
 export {ApiSetEngine} from "./ApiSetEngine";
-export {jsonRpcApiProbe, jsonRpcMethodProbe, jsonRpcNamespaceProbe, restProbe, ProbeFailedError} from "./probes";
+export {jsonRpcApiProbe, jsonRpcMethodProbe, jsonRpcNamespaceProbe, NoBackendError, restProbe, ProbeFailedError} from "./probes";
 export type {ApiProbe, ProbeContext, ProbeResult} from "./probes";
 export {fetchTransport, isApiNotFound, TransportError} from "./transport";
 export type {ApiTransport, JsonRpcError, JsonRpcResponse, RestResponse} from "./transport";

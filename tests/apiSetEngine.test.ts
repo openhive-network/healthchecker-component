@@ -1,13 +1,15 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiSetEngine,
+  fetchTransport,
   isApiNotFound,
   jsonRpcApiProbe,
   jsonRpcMethodProbe,
   jsonRpcNamespaceProbe,
   localStorageAdapter,
   memoryStorage,
+  NoBackendError,
   ProbeFailedError,
   restProbe,
   TransportError,
@@ -19,15 +21,18 @@ import {
   getMethods,
   HIVE,
   hiveBlog,
+  hiveBlogHttp,
   hivesenseNotFound,
   liteInfo,
   liteUnmapped,
   OPENHIVE,
+  stubFetch,
   stubTransport,
   SYNCAD,
   syncad,
+  syncadHttp,
 } from "./stubTransport";
-import type { StubNode } from "./stubTransport";
+import type { FetchStubNode, StubNode } from "./stubTransport";
 
 const wax = vi.hoisted(() => {
   type Listener = (payload: unknown) => void;
@@ -401,6 +406,101 @@ describe("ApiSetEngine", () => {
     it("treats a lite.get_info error other than not served as a failed probe", async () => {
       const stubs = { [HIVE]: { rpc: { "lite.get_info": { error: { code: -32000, message: "internal" } } } } };
       await expect(lite.probe(context(stubs))).rejects.toThrow("lite.get_info: internal");
+    });
+  });
+
+  describe("over HTTP (fetchTransport)", () => {
+    const TECHCODERX = "https://techcoderx.com";
+    const ROELANDP = "https://hive.roelandp.nl";
+    const INTERNAL_SERVER_ERROR = { status: 500, body: { message: "Internal Server Error" } };
+    const NO_BACKEND = { status: 503, body: "<html><body><h1>503 Service Unavailable</h1></body></html>" };
+    const hivesense: ApiSet = { id: "hivesense", title: "HiveSense", probe: restProbe("/hivesense-api/") };
+
+    const setupHttp = (nodes: Record<string, FetchStubNode>, overrides: Partial<ApiSetEngineOptions> = {}) => {
+      const http = stubFetch(nodes);
+      vi.stubGlobal("fetch", http.fetch);
+      return { ...setup({ nodes: Object.keys(nodes), transport: fetchTransport, ...overrides }), http };
+    };
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("reads the router's HTTP 404 'Unable to map' answer as lite unsupported, not down", async () => {
+      const { engine } = setupHttp({ [HIVE]: hiveBlogHttp(), [SYNCAD]: syncadHttp() }, { sets: [bridge, lite] });
+      await engine.refresh();
+      expect(ranking(engine, "lite", HIVE)).toMatchObject({ state: "unsupported", reason: UNMAPPED });
+      expect(states(engine.rankings("lite"))[SYNCAD]).toBe("eligible");
+      expect(states(engine.rankings("bridge"))).toEqual({ [HIVE]: "eligible", [SYNCAD]: "eligible" });
+      expect(engine.bestNode("lite")).toBe(SYNCAD);
+    });
+
+    it("reads any HTTP 404 to a JSON-RPC call as not served, and a 500 without a JSON-RPC answer as a failed probe", async () => {
+      const { engine } = setupHttp(
+        {
+          [HIVE]: { rpc: { ...hiveBlogHttp().rpc, "lite.get_info": { status: 404, body: "<html>Not Found</html>" } } },
+          [ROELANDP]: { rpc: { "bridge.get_post": INTERNAL_SERVER_ERROR, "lite.get_info": INTERNAL_SERVER_ERROR } },
+        },
+        { sets: [bridge, lite] },
+      );
+      await engine.refresh();
+      expect(states(engine.rankings("lite"))).toEqual({ [HIVE]: "unsupported", [ROELANDP]: "down" });
+      expect(ranking(engine, "lite", ROELANDP)?.reason).toBe(`${ROELANDP}: HTTP 500`);
+
+      await expect(fetchTransport.jsonRpc(ROELANDP, "lite.get_info", {}, 1000)).rejects.toMatchObject({ status: 500 });
+      const notFound = await fetchTransport.jsonRpc(HIVE, "lite.get_info", {}, 1000);
+      expect(isApiNotFound(notFound.error)).toBe(true);
+    });
+
+    it("returns a JSON-RPC error answer whatever its status, for the probe to classify", async () => {
+      const internal = { jsonrpc: "2.0", id: 1, error: { code: -32603, message: "Internal Error" } };
+      const { engine } = setupHttp({ [HIVE]: { rpc: { "bridge.get_post": { status: 500, body: internal } } } }, { sets: [bridge] });
+      await expect(fetchTransport.jsonRpc(HIVE, "bridge.get_post", {}, 1000)).resolves.toEqual({ error: internal.error });
+      await engine.refresh();
+      expect(ranking(engine, "bridge", HIVE)).toMatchObject({ state: "down", reason: "bridge.get_post: Internal Error" });
+    });
+
+    it("finds a REST route with no backend unsupported after `downAfterFailures` probes on a node up for another set", async () => {
+      const nodes: Record<string, FetchStubNode> = { [TECHCODERX]: { rpc: hiveBlogHttp().rpc, rest: { "/hivesense-api/": NO_BACKEND } } };
+      const { engine, clock, http } = setupHttp(nodes, {
+        sets: [bridge, hivesense],
+        downAfterFailures: 3,
+        timing: { downCooldownMs: 30_000, noBackendRecheckMs: 3_600_000, unsupportedTtlMs: 21_600_000 },
+      });
+      await expect(hivesense.probe({ node: TECHCODERX, transport: fetchTransport, timeoutMs: 1000 })).rejects.toThrow(NoBackendError);
+
+      for (let round = 1; round < 3; round++) {
+        await engine.refresh();
+        expect(ranking(engine, "hivesense", TECHCODERX)).toMatchObject({ state: "down", reason: "/hivesense-api/: HTTP 503, no backend" });
+        clock.now += 30_000;
+      }
+      await engine.refresh();
+      expect(ranking(engine, "hivesense", TECHCODERX)).toMatchObject({ state: "unsupported", reason: "/hivesense-api/: HTTP 503, no backend" });
+      expect(states(engine.rankings("bridge"))[TECHCODERX]).toBe("eligible");
+
+      const probes = () => http.calls.filter((c) => c === `${TECHCODERX} /hivesense-api/`).length;
+      const before = probes();
+      clock.now += 3_600_000 - 1;
+      await engine.refresh();
+      expect(probes()).toBe(before);
+      nodes[TECHCODERX].rest!["/hivesense-api/"] = { status: 200, body: {} };
+      clock.now += 1;
+      await engine.refresh();
+      expect(probes()).toBe(before + 1);
+      expect(states(engine.rankings("hivesense"))[TECHCODERX]).toBe("eligible");
+    });
+
+    it("keeps a node whose every set fails down, also on REST 502/503", async () => {
+      const { engine, clock } = setupHttp(
+        { [ROELANDP]: { rpc: { "bridge.get_post": INTERNAL_SERVER_ERROR }, rest: { "/hivesense-api/": { status: 502, body: "Bad Gateway" } } } },
+        { sets: [bridge, hivesense], downAfterFailures: 3, timing: { downCooldownMs: 30_000 } },
+      );
+      for (let round = 0; round < 5; round++) {
+        await engine.refresh();
+        clock.now += 30_000;
+      }
+      expect(ranking(engine, "hivesense", ROELANDP)).toMatchObject({ state: "down", reason: "/hivesense-api/: HTTP 502, no backend" });
+      expect(states(engine.rankings("bridge"))[ROELANDP]).toBe("down");
     });
   });
 

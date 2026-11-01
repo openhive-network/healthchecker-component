@@ -39,7 +39,10 @@ export const OPENHIVE = "https://api.openhive.network";
 // Answers captured from the nodes on 2026-11-01, verbatim (tests/fixtures/).
 /** `jsonrpc.get_methods` of api.hive.blog and api.syncad.com alike: hived's 171 methods, no bridge/lite. */
 export const getMethods = hivedMethods as JsonRpcResponse;
-/** `lite.get_info` where no backend serves lite (api.hive.blog, api.openhive.network): the router's answer. */
+/**
+ * `lite.get_info` where no backend serves lite (api.hive.blog, api.openhive.network): the body of the
+ * router's HTTP 404 answer (`liteUnmappedHttp`), as `fetchTransport` returns it.
+ */
 export const liteUnmapped = routerUnmapped as JsonRpcResponse;
 /** `lite.get_info` on api.syncad.com. */
 export const liteInfo = syncadLite as JsonRpcResponse;
@@ -57,4 +60,51 @@ export const hiveBlog = (): StubNode => ({
 /** api.syncad.com: bridge and lite. */
 export const syncad = (): StubNode => ({
   rpc: { "jsonrpc.get_methods": getMethods, "bridge.get_post": bridgeMissingPost, "lite.get_info": liteInfo },
+});
+
+/** An HTTP answer for {@link stubFetch}: a string body is sent as is, anything else as JSON. */
+export interface HttpAnswer {
+  status: number;
+  body: unknown;
+}
+
+export interface FetchStubNode {
+  /** Per JSON-RPC method (a POST to the node); an `Error` is thrown as `fetch` throws on a failed connection. */
+  rpc?: Record<string, HttpAnswer | Error>;
+  /** Per path (a GET). */
+  rest?: Record<string, HttpAnswer | Error>;
+}
+
+/** The router's answer to `lite.get_info` where no backend serves lite, verbatim: HTTP 404. */
+export const liteUnmappedHttp: HttpAnswer = { status: 404, body: routerUnmapped };
+
+/**
+ * A `fetch` answering from `nodes` (mutable), for running the engine through `fetchTransport`: install
+ * it with `vi.stubGlobal("fetch", …)`. Unstubbed requests fail as a refused connection.
+ */
+export const stubFetch = (nodes: Record<string, FetchStubNode>) => {
+  const calls: string[] = [];
+  const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = new URL(String(input));
+    const node = url.origin;
+    const key = init?.method === "POST" ? (JSON.parse(String(init.body)) as { method: string }).method : url.pathname;
+    calls.push(`${node} ${key}`);
+    const answer = init?.method === "POST" ? nodes[node]?.rpc?.[key] : nodes[node]?.rest?.[key];
+    if (answer === undefined) throw new TypeError(`fetch failed: no stubbed answer for ${node} ${key}`);
+    if (answer instanceof Error) throw answer;
+    const body = typeof answer.body === "string" ? answer.body : JSON.stringify(answer.body);
+    return new Response(body, { status: answer.status, headers: { "Access-Control-Allow-Origin": "*" } });
+  };
+  return { fetch, calls };
+};
+
+const ok = (body: unknown): HttpAnswer => ({ status: 200, body });
+
+/** api.hive.blog over HTTP: bridge, the router's 404 for lite. */
+export const hiveBlogHttp = (): FetchStubNode => ({
+  rpc: { "jsonrpc.get_methods": ok(hivedMethods), "bridge.get_post": ok(missingPost), "lite.get_info": liteUnmappedHttp },
+});
+/** api.syncad.com over HTTP: bridge and lite. */
+export const syncadHttp = (): FetchStubNode => ({
+  rpc: { "jsonrpc.get_methods": ok(hivedMethods), "bridge.get_post": ok(missingPost), "lite.get_info": ok(syncadLite) },
 });
