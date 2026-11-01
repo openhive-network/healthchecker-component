@@ -124,7 +124,7 @@ export class ApiSetEngine extends EventTarget {
   /**
    * A fresh engine for one server-side request: `shared`'s options and node health (its
    * {@link snapshot}), and the user's `cookieState` ({@link serialize}d), kept in memory. It is read-only
-   * health-wise: `start()` and `refresh()` do nothing, it runs no wax checks and never calls the sets'
+   * health-wise: `start()` and `refresh()` do nothing, `report()` is ignored, it runs no wax checks and never calls the sets'
    * `probe` or `freshness`, so a cookie's custom node is never fetched by the server. Such a
    * node has no health in `shared`'s snapshot, so a choice of it uses `auto` until a browser engine probes
    * it. `shared` is the process's long-lived engine probing the operator catalog only; never `hydrate` a
@@ -383,8 +383,12 @@ export class ApiSetEngine extends EventTarget {
 
   // Evidence
 
-  /** Feeds the result of a real call to `node` for the set. Ignored (false) for unknown sets or nodes. */
+  /**
+   * Feeds the result of a real call to `node` for the set. Ignored (false) for unknown sets or nodes,
+   * and on a `forRequest` engine, whose nodes may come from a user's cookie: report to the shared engine.
+   */
   report(setId: string, node: string, outcome: ReportOutcome): boolean {
+    if (this.readOnly) return false;
     const entry = this.entries.get(setId)?.get(canonicalNodeUrl(node));
     if (!entry) return false;
     if (outcome.latencyMs !== undefined) entry.stats.addLatency(outcome.latencyMs);

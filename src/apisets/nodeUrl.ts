@@ -19,6 +19,9 @@ export const normalizeNodeUrl = (url: string): string | undefined => {
   return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}${parsed.search}`;
 };
 
+// Unparseable input has no reliable authority, so everything up to the last `@` may be user info.
+const redactUserInfo = (url: string) => url.replace(/^((?:[^:/?#@]*:)?\/\/)?.*@/s, "$1***@");
+
 /**
  * {@link normalizeNodeUrl} for operator configuration: throws a TypeError naming why `url` is not a
  * node URL. The message never repeats the user info, which may be a password.
@@ -32,7 +35,7 @@ export const requireNodeUrl = (url: string): string => {
     parsed.password = "";
     throw new TypeError(`Node URLs must not contain user info: ${parsed.href}`);
   }
-  throw new TypeError(`Not an http(s) node URL: ${url}`);
+  throw new TypeError(`Not an http(s) node URL: ${redactUserInfo(url)}`);
 };
 
 /** {@link normalizeNodeUrl}, or `url` itself when it is not a node URL (so it matches no node). */
