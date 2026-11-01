@@ -97,6 +97,11 @@ export interface EngineTiming {
   tickMs: number;
   /** A `hydrateSnapshot` snapshot older than this (e.g. from a CDN-cached page) is ignored. */
   snapshotMaxAgeMs: number;
+  /**
+   * How much older than `snapshotMaxAgeMs` a `hydrateSnapshot` snapshot may look before it is ignored,
+   * when no measured `clockOffsetMs` is given: allowance for this engine's clock running ahead of the server's.
+   */
+  snapshotClockSkewMs: number;
 }
 
 export interface ApiSetEngineOptions {
