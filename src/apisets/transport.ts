@@ -1,6 +1,7 @@
 export interface JsonRpcError {
   code: number;
   message: string;
+  data?: unknown;
 }
 
 export type JsonRpcResponse = { result: unknown; error?: undefined } | { error: JsonRpcError; result?: undefined };
