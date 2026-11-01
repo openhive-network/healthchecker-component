@@ -1,3 +1,5 @@
+import { normalizeNodeUrl } from "./nodeUrl";
+
 /** The user's part of an engine's state: per-set node choices and the nodes they added. */
 export interface SelectionState {
   choices: Map<string, string>;
@@ -6,15 +8,6 @@ export interface SelectionState {
 
 const VERSION = "1";
 const SET_PREFIX = "s.";
-
-export const isNodeUrl = (url: string) => {
-  try {
-    const { protocol } = new URL(url);
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-};
 
 /**
  * A compact, cookie-safe form (URL query encoding: no `;`, `,`, quotes or whitespace). Catalog nodes
@@ -31,8 +24,9 @@ export const serializeSelection = ({ choices, customNodes }: SelectionState, cat
 };
 
 /**
- * Reads {@link serializeSelection}'s form. Returns `undefined` for another version; drops custom nodes
- * that are not http(s) URLs and choices of sets or nodes the engine does not know.
+ * Reads {@link serializeSelection}'s form, normalizing node URLs. Returns `undefined` for another version;
+ * drops custom nodes that are not http(s) URLs and choices of sets or nodes the engine does not know.
+ * `catalog` holds normalized URLs.
  */
 export const parseSelection = (
   text: string,
@@ -41,12 +35,14 @@ export const parseSelection = (
 ): SelectionState | undefined => {
   const params = new URLSearchParams(text);
   if (params.get("v") !== VERSION) return undefined;
-  const customNodes = [...new Set(params.getAll("c"))].filter((node) => isNodeUrl(node) && !catalog.includes(node));
+  const customNodes = [
+    ...new Set(params.getAll("c").flatMap((url) => normalizeNodeUrl(url) ?? [])),
+  ].filter((node) => !catalog.includes(node));
   const choices = new Map<string, string>();
   for (const [key, value] of params) {
     const setId = key.slice(SET_PREFIX.length);
     if (!key.startsWith(SET_PREFIX) || !setIds.has(setId)) continue;
-    const node = /^\d+$/.test(value) ? catalog[Number(value)] : value;
+    const node = /^\d+$/.test(value) ? catalog[Number(value)] : normalizeNodeUrl(value);
     if (node && (catalog.includes(node) || customNodes.includes(node))) choices.set(setId, node);
   }
   return { choices, customNodes };

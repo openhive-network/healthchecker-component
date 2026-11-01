@@ -8,15 +8,18 @@ const peers = Object.keys(peerDependencies);
 export default defineConfig({
   plugins: [
     react(),
-    dts({ insertTypesEntry: true, include: ["src"] }),
+    // rootDir: the declarations mirror src/ (dist/index.d.ts, dist/engine.d.ts), one per entry.
+    dts({ insertTypesEntry: true, include: ["src"], compilerOptions: { rootDir: "src" } }),
   ],
   build: { 
     lib: { 
       entry: {
-        component: './src/index.ts'
+        index: './src/index.ts',
+        engine: './src/engine.ts',
       },
       name: 'healthchecker-component', 
-      fileName: (format) => `healthchecker-component.${format}.js`,
+      fileName: (format, entryName) =>
+        entryName === 'index' ? `healthchecker-component.${format}.js` : `${entryName}.${format}.js`,
       formats: ['es'],
     }, 
     rollupOptions: { 

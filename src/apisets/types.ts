@@ -1,6 +1,7 @@
 import type { HealthChecker } from "@hiveio/wax";
 import type { ApiChecker } from "../components/healthchecker/HealthCheckerService";
 import type { ApiProbe, ProbeContext } from "./probes";
+import type { StatsSnapshot } from "./stats";
 import type { SelectionStorage } from "./storage";
 import type { ApiTransport } from "./transport";
 
@@ -38,7 +39,7 @@ export interface NodeRanking {
   state: NodeState;
   reason?: string;
   features?: string[];
-  /** Eligible, but failing too many calls or lagging beyond the set's freshness threshold. */
+  /** Eligible, but failing too many calls, its last checked answer rejected, or lagging beyond the set's freshness threshold. */
   degraded: boolean;
   medianLatencyMs?: number;
   p95LatencyMs?: number;
@@ -52,6 +53,25 @@ export interface NodeRanking {
   /** The node `bestNode` returns. */
   isActive: boolean;
   isCustom: boolean;
+}
+
+/** One node's health for one set, as `ApiSetEngine.snapshot` records it. */
+export interface NodeSnapshot extends StatsSnapshot {
+  state: NodeState;
+  reason?: string;
+  features?: string[];
+  /** Why the node's last checked answer was rejected; the node ranks degraded until a check passes. */
+  invalidData?: string;
+  freshnessLag?: number;
+  lastProbeAt?: number;
+  /** How long after the snapshot the node is due to be probed again. */
+  nextProbeInMs: number;
+}
+
+/** An engine's view of node health (not the user's choices: see `ApiSetEngine.serialize`), as JSON. */
+export interface ApiSetSnapshot {
+  v: 1;
+  sets: Record<string, { default?: string; nodes: Record<string, NodeSnapshot> }>;
 }
 
 export interface GroupStatus {

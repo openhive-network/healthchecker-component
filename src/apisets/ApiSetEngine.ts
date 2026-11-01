@@ -1,6 +1,8 @@
 import { HealthChecker, TScoredEndpoint, WaxHealthCheckerError, WaxHealthCheckerValidatorFailedError } from "@hiveio/wax";
 import { Availability, Candidate, chooseDefaults, compareCandidates } from "./defaults";
-import { isNodeUrl, parseSelection, serializeSelection } from "./selection";
+import { canonicalNodeUrl, normalizeNodeUrl } from "./nodeUrl";
+import { parseSelection, serializeSelection } from "./selection";
+import { readSnapshot } from "./snapshot";
 import { NodeStats } from "./stats";
 import { memoryStorage, SelectionStorage } from "./storage";
 import { ApiTransport, fetchTransport } from "./transport";
@@ -8,9 +10,11 @@ import type {
   ApiSet,
   ApiSetEngineEvents,
   ApiSetEngineOptions,
+  ApiSetSnapshot,
   EngineTiming,
   GroupStatus,
   NodeRanking,
+  NodeSnapshot,
   NodeState,
   ReportOutcome,
 } from "./types";
@@ -30,6 +34,10 @@ interface NodeEntry {
   state: NodeState;
   reason?: string;
   features?: string[];
+  invalidData?: string;
+  /** Counts state changes, so a probe that started before one drops its answer. */
+  generation: number;
+  probing: boolean;
   nextProbeAt: number;
   lastProbeAt?: number;
   freshnessLag?: number;
@@ -70,12 +78,21 @@ export class ApiSetEngine extends EventTarget {
 
   constructor(options: ApiSetEngineOptions) {
     super();
-    this.catalog = [...new Set(options.nodes)];
+    this.catalog = [
+      ...new Set(
+        options.nodes.map((node) => {
+          const url = normalizeNodeUrl(node);
+          if (!url) throw new TypeError(`Not an http(s) node URL: ${node}`);
+          return url;
+        }),
+      ),
+    ];
     this.setsById = new Map(options.sets.map((set) => [set.id, set]));
     this.tiers = new Map(
       options.sets.map((set) => {
         const order = options.preferences?.[set.id] ?? this.catalog;
-        return [set.id, new Map(order.flatMap((rank, tier) => (Array.isArray(rank) ? rank : [rank]).map((node) => [node, tier])))];
+        const ranks = order.map((rank) => (Array.isArray(rank) ? rank : [rank]).map(canonicalNodeUrl));
+        return [set.id, new Map(ranks.flatMap((rank, tier) => rank.map((node) => [node, tier])))];
       }),
     );
     this.transport = options.transport ?? fetchTransport;
@@ -89,7 +106,7 @@ export class ApiSetEngine extends EventTarget {
     for (const set of options.sets) this.entries.set(set.id, new Map());
     for (const node of this.catalog) this.track(node);
     const saved = this.storage.load();
-    if (!saved || !this.hydrate(saved)) this.recompute();
+    if (!saved || !this.restore(saved)) this.recompute();
   }
 
   // Events
@@ -136,7 +153,7 @@ export class ApiSetEngine extends EventTarget {
       return {
         node,
         state: entry.state,
-        reason: entry.reason,
+        reason: entry.reason ?? entry.invalidData,
         features: entry.features,
         degraded: availability === Availability.Degraded,
         medianLatencyMs: entry.stats.median(),
@@ -169,44 +186,55 @@ export class ApiSetEngine extends EventTarget {
     if (node === "auto") {
       this.choices.delete(setId);
     } else {
-      if (this.entries.get(setId)?.get(node)?.state !== "eligible") return false;
-      this.choices.set(setId, node);
+      const url = canonicalNodeUrl(node);
+      if (this.entries.get(setId)?.get(url)?.state !== "eligible") return false;
+      this.choices.set(setId, url);
     }
     this.persist();
     this.recompute();
     return true;
   }
 
-  /** Chooses `node` for every set it is eligible for; other sets keep their selection. Returns those set ids. */
+  /**
+   * Chooses `node` for every set it is eligible for, and `auto` for the other sets. Returns the ids of
+   * the sets that use it; nothing changes (and none are returned) for a node the engine does not know.
+   */
   selectEverywhere(node: string): string[] {
-    const applied = this.sets()
-      .map((set) => set.id)
-      .filter((setId) => this.entries.get(setId)?.get(node)?.state === "eligible");
-    for (const setId of applied) this.choices.set(setId, node);
-    if (applied.length) {
-      this.persist();
-      this.recompute();
+    const url = canonicalNodeUrl(node);
+    if (!this.nodes().includes(url)) return [];
+    const applied: string[] = [];
+    for (const { id } of this.sets()) {
+      if (this.entries.get(id)?.get(url)?.state === "eligible") {
+        this.choices.set(id, url);
+        applied.push(id);
+      } else {
+        this.choices.delete(id);
+      }
     }
+    this.persist();
+    this.recompute();
     return applied;
   }
 
-  /** Adds a user node. It is probed before it is offered for any set. */
+  /** Adds a user node; while started, it is probed at once. It is offered for a set once found eligible. */
   addNode(node: string): boolean {
-    if (!isNodeUrl(node) || this.nodes().includes(node)) return false;
-    this.customNodes = [...this.customNodes, node];
-    this.track(node);
+    const url = normalizeNodeUrl(node);
+    if (!url || this.nodes().includes(url)) return false;
+    this.customNodes = [...this.customNodes, url];
+    this.track(url);
     this.persist();
     this.recompute();
-    if (this.timer) void this.refresh();
+    if (this.timer) void this.probeNode(url);
     return true;
   }
 
   /** Removes a user node, and any choice of it. Catalog nodes cannot be removed. */
   removeNode(node: string): boolean {
-    if (!this.customNodes.includes(node)) return false;
-    this.customNodes = this.customNodes.filter((custom) => custom !== node);
-    for (const entries of this.entries.values()) entries.delete(node);
-    for (const [setId, chosen] of this.choices) if (chosen === node) this.choices.delete(setId);
+    const url = canonicalNodeUrl(node);
+    if (!this.customNodes.includes(url)) return false;
+    this.customNodes = this.customNodes.filter((custom) => custom !== url);
+    for (const entries of this.entries.values()) entries.delete(url);
+    for (const [setId, chosen] of this.choices) if (chosen === url) this.choices.delete(setId);
     this.persist();
     this.syncChecks();
     this.recompute();
@@ -221,10 +249,18 @@ export class ApiSetEngine extends EventTarget {
   }
 
   /**
-   * Replaces the user's choices and nodes with a {@link serialize}d state, e.g. from a cookie during SSR.
-   * A restored choice is used until a probe finds its node unusable. Returns false for an unreadable state.
+   * Replaces the user's choices and nodes with a {@link serialize}d state, e.g. from a cookie during SSR,
+   * and saves it to the engine's storage. A restored choice is used once its node is eligible for the set
+   * (probed, or eligible in a {@link hydrateSnapshot}); until then the set uses the auto default.
+   * Returns false for an unreadable state.
    */
   hydrate(state: string): boolean {
+    if (!this.restore(state)) return false;
+    this.persist();
+    return true;
+  }
+
+  private restore(state: string): boolean {
     const parsed = parseSelection(state, this.catalog, new Set(this.setsById.keys()));
     if (!parsed) return false;
     for (const node of this.customNodes) if (!parsed.customNodes.includes(node)) for (const e of this.entries.values()) e.delete(node);
@@ -236,21 +272,85 @@ export class ApiSetEngine extends EventTarget {
     return true;
   }
 
+  /**
+   * The engine's view of node health: per set, each node's state, features and samples, and the current
+   * default. JSON-safe; pass it with {@link serialize}'s state from a server render to the browser's
+   * engine ({@link hydrateSnapshot}) so both pick the same nodes before the browser probes anything.
+   */
+  snapshot(): ApiSetSnapshot {
+    const now = this.now();
+    const sets: ApiSetSnapshot["sets"] = {};
+    for (const [setId, entries] of this.entries) {
+      const nodes: Record<string, NodeSnapshot> = {};
+      for (const [node, entry] of entries) {
+        nodes[node] = {
+          state: entry.state,
+          reason: entry.reason,
+          features: entry.features,
+          invalidData: entry.invalidData,
+          ...entry.stats.snapshot(),
+          freshnessLag: entry.freshnessLag,
+          lastProbeAt: entry.lastProbeAt,
+          nextProbeInMs: Math.max(0, entry.nextProbeAt - now),
+        };
+      }
+      sets[setId] = { default: this.defaults.get(setId), nodes };
+    }
+    return { v: 1, sets };
+  }
+
+  /**
+   * Takes over a {@link snapshot} (e.g. a server engine's, read from the page), for the sets and nodes
+   * this engine knows; restore the user's custom nodes with {@link hydrate} first. Nodes are probed again
+   * when the snapshot says they are due. Returns false for an unreadable snapshot.
+   */
+  hydrateSnapshot(snapshot: unknown): boolean {
+    const parsed = readSnapshot(snapshot);
+    if (!parsed) return false;
+    const now = this.now();
+    for (const [setId, { default: defaultNode, nodes }] of Object.entries(parsed.sets)) {
+      const entries = this.entries.get(setId);
+      if (!entries) continue;
+      for (const [node, saved] of Object.entries(nodes)) {
+        const entry = entries.get(canonicalNodeUrl(node));
+        if (!entry) continue;
+        entry.state = saved.state;
+        entry.reason = saved.reason;
+        entry.features = saved.features;
+        entry.invalidData = saved.invalidData;
+        entry.stats.restore(saved);
+        entry.freshnessLag = saved.freshnessLag;
+        entry.freshnessCheckedAt = saved.freshnessLag === undefined ? undefined : now;
+        entry.lastProbeAt = saved.lastProbeAt;
+        entry.nextProbeAt = now + saved.nextProbeInMs;
+        entry.generation += 1;
+      }
+      const url = defaultNode === undefined ? undefined : canonicalNodeUrl(defaultNode);
+      if (url && entries.has(url)) this.defaults.set(setId, url);
+    }
+    this.syncChecks();
+    this.recompute();
+    return true;
+  }
+
   // Evidence
 
   /** Feeds the result of a real call to `node` for the set. Ignored (false) for unknown sets or nodes. */
   report(setId: string, node: string, outcome: ReportOutcome): boolean {
-    const entry = this.entries.get(setId)?.get(node);
+    const entry = this.entries.get(setId)?.get(canonicalNodeUrl(node));
     if (!entry) return false;
     if (outcome.latencyMs !== undefined) entry.stats.addLatency(outcome.latencyMs);
     entry.stats.addOutcome(outcome.ok);
     if (outcome.ok) {
       entry.stats.consecutiveTransportFailures = 0;
+      entry.invalidData = undefined;
       if (entry.state !== "eligible") this.setState(entry, "eligible", undefined, this.timing.eligibleRecheckMs);
     } else if (outcome.error === "apiNotFound") {
       this.setState(entry, "unsupported", outcome.message ?? "API not found", this.timing.unsupportedTtlMs);
     } else if (outcome.error === "transport") {
       this.transportFailure(entry, outcome.message ?? "transport error");
+    } else {
+      entry.invalidData = outcome.message ?? "invalid answer";
     }
     this.syncChecks();
     this.recompute();
@@ -288,6 +388,7 @@ export class ApiSetEngine extends EventTarget {
     const work: Promise<void>[] = [];
     for (const set of this.setsById.values()) {
       for (const [node, entry] of this.entries.get(set.id)!) {
+        if (entry.probing) continue;
         if (entry.nextProbeAt <= now) work.push(this.probe(set, node, entry));
         else if (set.freshness && entry.state === "eligible" && (entry.freshnessCheckedAt ?? -Infinity) + this.timing.freshnessIntervalMs <= now)
           work.push(this.probeFreshness(set, node, entry));
@@ -298,21 +399,46 @@ export class ApiSetEngine extends EventTarget {
     this.recompute();
   }
 
+  /** Probes a node for every set at once, outside the rounds. */
+  private async probeNode(node: string) {
+    await Promise.all(
+      this.sets().flatMap((set) => {
+        const entry = this.entries.get(set.id)!.get(node);
+        return entry && !entry.probing ? [this.probe(set, node, entry)] : [];
+      }),
+    );
+    this.syncChecks();
+    this.recompute();
+  }
+
   private async probe(set: ApiSet, node: string, entry: NodeEntry) {
     const context = { node, transport: this.transport, timeoutMs: this.timing.probeTimeoutMs };
+    const generation = entry.generation;
+    let answer: { state: NodeState; reason?: string; features?: string[] };
+    entry.probing = true;
     try {
       const result = await set.probe(context);
-      if (result.supported) {
-        entry.features = result.features;
-        entry.stats.consecutiveTransportFailures = 0;
-        this.setState(entry, "eligible", undefined, this.timing.eligibleRecheckMs);
-      } else {
-        entry.features = undefined;
-        this.setState(entry, "unsupported", result.reason, this.timing.unsupportedTtlMs);
-      }
+      answer = result.supported ? { state: "eligible", features: result.features } : { state: "unsupported", reason: result.reason };
     } catch (error) {
       // A probe that cannot answer says nothing about support: the node is down for the set.
-      this.setState(entry, "down", errorMessage(error), this.timing.downCooldownMs);
+      answer = { state: "down", reason: errorMessage(error) };
+    } finally {
+      entry.probing = false;
+    }
+    // A report (or snapshot) changed the node's state while the probe ran: its evidence is newer.
+    if (entry.generation !== generation) return;
+    switch (answer.state) {
+      case "eligible":
+        entry.features = answer.features;
+        entry.stats.consecutiveTransportFailures = 0;
+        this.setState(entry, "eligible", undefined, this.timing.eligibleRecheckMs);
+        break;
+      case "unsupported":
+        entry.features = undefined;
+        this.setState(entry, "unsupported", answer.reason, this.timing.unsupportedTtlMs);
+        break;
+      default:
+        this.setState(entry, "down", answer.reason, this.timing.downCooldownMs);
     }
     entry.lastProbeAt = this.now();
     if (set.freshness && entry.state === "eligible") await this.probeFreshness(set, node, entry);
@@ -332,6 +458,7 @@ export class ApiSetEngine extends EventTarget {
     entry.state = state;
     entry.reason = reason;
     entry.nextProbeAt = this.now() + recheckMs;
+    entry.generation += 1;
   }
 
   private transportFailure(entry: NodeEntry, reason: string) {
@@ -342,7 +469,7 @@ export class ApiSetEngine extends EventTarget {
 
   private track(node: string) {
     for (const entries of this.entries.values())
-      if (!entries.has(node)) entries.set(node, { state: "unknown", nextProbeAt: 0, stats: new NodeStats() });
+      if (!entries.has(node)) entries.set(node, { state: "unknown", generation: 0, probing: false, nextProbeAt: 0, stats: new NodeStats() });
   }
 
   private persist() {
@@ -372,30 +499,56 @@ export class ApiSetEngine extends EventTarget {
     }
   }
 
+  /**
+   * wax runs a round of checks, emits `validationerror` and then `error` for each check whose answer
+   * its validator rejected, `error` alone for each check that got no answer, then `data` with every
+   * endpoint's scores over its recent rounds.
+   */
   private listen(setId: string, checker: HealthChecker) {
-    const entryOf = (node: string | undefined) => (node ? this.entries.get(setId)?.get(node) : undefined);
-    checker.on("data", (endpoints: TScoredEndpoint[]) => {
-      for (const endpoint of endpoints) {
-        const entry = entryOf(endpoint.endpointUrl);
-        if (!entry || !endpoint.up) continue;
-        entry.stats.setCheckLatencies(endpoint.latencies);
-        entry.stats.addOutcome(true);
-        entry.stats.consecutiveTransportFailures = 0;
-      }
+    const entryOf = (node: string) => this.entries.get(setId)?.get(node);
+    // Per round: the endpoints that failed a check, and the validator failures whose `error` is to come.
+    const failed = new Set<string>();
+    const invalid = new Map<string, number>();
+    checker.on("validationerror", (error: WaxHealthCheckerValidatorFailedError) => {
+      const node = canonicalNodeUrl(error.request.endpoint);
+      const entry = entryOf(node);
+      if (!entry) return;
+      failed.add(node);
+      invalid.set(node, (invalid.get(node) ?? 0) + 1);
+      entry.stats.addOutcome(false);
+      entry.invalidData = error.message;
       this.recompute();
     });
     checker.on("error", (error: WaxHealthCheckerError) => {
-      const entry = entryOf(error.apiUrl);
+      if (!error.apiUrl) return;
+      const node = canonicalNodeUrl(error.apiUrl);
+      failed.add(node);
+      const pending = invalid.get(node) ?? 0;
+      if (pending) {
+        invalid.set(node, pending - 1);
+        return;
+      }
+      const entry = entryOf(node);
       if (!entry) return;
       entry.stats.addOutcome(false);
       this.transportFailure(entry, error.message);
       this.syncChecks();
       this.recompute();
     });
-    checker.on("validationerror", (error: WaxHealthCheckerValidatorFailedError) => {
-      const entry = entryOf(error.request.endpoint);
-      if (!entry) return;
-      entry.stats.addOutcome(false);
+    checker.on("data", (endpoints: TScoredEndpoint[]) => {
+      for (const endpoint of endpoints) {
+        const node = canonicalNodeUrl(endpoint.endpointUrl);
+        const entry = entryOf(node);
+        if (!entry || !endpoint.up) continue;
+        entry.stats.setCheckLatencies(endpoint.latencies);
+        // `up` covers wax's whole window; only a node that passed this round's checks has a new success.
+        if (failed.has(node)) continue;
+        entry.stats.addOutcome(true);
+        entry.stats.consecutiveTransportFailures = 0;
+        entry.invalidData = undefined;
+      }
+      failed.clear();
+      invalid.clear();
       this.recompute();
     });
   }
@@ -413,7 +566,7 @@ export class ApiSetEngine extends EventTarget {
       case "eligible": {
         const errorRate = entry.stats.sampleCount >= MIN_OUTCOMES_FOR_ERROR_RATE ? entry.stats.errorRate() ?? 0 : 0;
         const lagging = set.freshness !== undefined && entry.freshnessLag !== undefined && entry.freshnessLag > set.freshness.maxLag;
-        return errorRate > this.maxErrorRate || lagging ? Availability.Degraded : Availability.Healthy;
+        return errorRate > this.maxErrorRate || lagging || entry.invalidData !== undefined ? Availability.Degraded : Availability.Healthy;
       }
     }
   }
@@ -441,11 +594,13 @@ export class ApiSetEngine extends EventTarget {
     for (const set of sets) {
       const chosen = this.choices.get(set.id);
       const chosenEntry = chosen ? this.entries.get(set.id)?.get(chosen) : undefined;
-      const usable = chosenEntry !== undefined && (chosenEntry.state === "eligible" || chosenEntry.state === "unknown");
+      // A choice not yet probed (e.g. restored from a cookie anyone can write) waits for its probe.
+      const usable = chosenEntry?.state === "eligible";
+      const unusable = chosenEntry?.state === "down" || chosenEntry?.state === "unsupported";
       const node = usable ? chosen : defaults.get(set.id);
-      if (chosen && chosenEntry && !usable && !this.fallbacks.has(set.id)) {
+      if (chosen && unusable && !this.fallbacks.has(set.id)) {
         this.fallbacks.add(set.id);
-        this.emit("selectionfallback", { setId: set.id, selected: chosen, node, reason: chosenEntry.reason });
+        this.emit("selectionfallback", { setId: set.id, selected: chosen, node, reason: chosenEntry!.reason });
       } else if ((!chosen || usable) && this.fallbacks.delete(set.id) && chosen) {
         this.emit("selectionrestored", { setId: set.id, node: chosen });
       }

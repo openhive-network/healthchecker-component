@@ -9,6 +9,10 @@
     ".": {
       "import": "./dist/healthchecker-component.es.js",
       "types": "./dist/index.d.ts"
+    },
+    "./engine": {
+      "types": "./dist/engine.d.ts",
+      "import": "./dist/engine.es.js"
     }
   },
   "engines": {

@@ -27,7 +27,8 @@ export class TransportError extends Error {
   }
 }
 
-const API_NOT_FOUND = /could not find (api|method)|api not found|method not found|PGRST202/i;
+// hived's own answer, jussi's/drone's for a namespace no backend behind them serves, PostgREST's.
+const API_NOT_FOUND = /could not find (api|method)|api not found|method not found|unable to map request to endpoint|PGRST202/i;
 const JSON_RPC_METHOD_NOT_FOUND = -32601;
 
 /**
