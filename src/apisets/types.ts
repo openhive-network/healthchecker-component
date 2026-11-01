@@ -64,13 +64,15 @@ export interface NodeSnapshot extends StatsSnapshot {
   invalidData?: string;
   freshnessLag?: number;
   lastProbeAt?: number;
-  /** How long after the snapshot the node is due to be probed again. */
+  /** How long after the snapshot the node is due to be probed again; capped by the engine's timing for its state. */
   nextProbeInMs: number;
 }
 
 /** An engine's view of node health (not the user's choices: see `ApiSetEngine.serialize`), as JSON. */
 export interface ApiSetSnapshot {
   v: 1;
+  /** When it was taken (the taking engine's `now()`), so a cached copy can be aged or ignored. */
+  createdAt: number;
   sets: Record<string, { default?: string; nodes: Record<string, NodeSnapshot> }>;
 }
 
@@ -93,6 +95,8 @@ export interface EngineTiming {
   freshnessIntervalMs: number;
   /** How often `start()` looks for due probes. */
   tickMs: number;
+  /** A `hydrateSnapshot` snapshot older than this (e.g. from a CDN-cached page) is ignored. */
+  snapshotMaxAgeMs: number;
 }
 
 export interface ApiSetEngineOptions {

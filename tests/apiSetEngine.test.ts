@@ -8,6 +8,7 @@ import {
   jsonRpcNamespaceProbe,
   localStorageAdapter,
   memoryStorage,
+  ProbeFailedError,
   restProbe,
   TransportError,
 } from "../src";
@@ -316,6 +317,19 @@ describe("ApiSetEngine", () => {
     it("refuses a catalog entry that is not an http(s) URL", () => {
       expect(() => setup({ nodes: [HIVE, "wss://api.hive.blog"] })).toThrow(TypeError);
     });
+
+    it("treats an empty query as none and rejects URLs with user info", () => {
+      const { engine } = setup();
+      expect(engine.addNode(`${HIVE}/?`)).toBe(false);
+      expect(engine.addNode(`${CUSTOM}/?#top`)).toBe(true);
+      expect(engine.nodes()).toEqual([HIVE, SYNCAD, CUSTOM]);
+
+      expect(engine.addNode("https://user:secret@other.example")).toBe(false);
+      expect(engine.addNode("https://user@other.example")).toBe(false);
+      expect(engine.hydrate(`v=1&c=${encodeURIComponent("https://user:secret@other.example")}`)).toBe(true);
+      expect(engine.nodes()).toEqual([HIVE, SYNCAD]);
+      expect(() => setup({ nodes: [HIVE, "https://user:secret@api.syncad.com"] })).toThrow(TypeError);
+    });
   });
 
   describe("probes", () => {
@@ -333,7 +347,7 @@ describe("ApiSetEngine", () => {
       expect(getMethods.result).toHaveLength(171);
     });
 
-    it("reads not served from the router's and hived's answers, and anything else as served", async () => {
+    it("reads not served from the router's and hived's answers, and the API's own errors as served", async () => {
       const probe = jsonRpcApiProbe("lite.get_info");
       await expect(probe(context({ [HIVE]: hiveBlog() }))).resolves.toEqual({ supported: false, reason: UNMAPPED });
       await expect(probe(context({ [SYNCAD]: syncad() }, SYNCAD))).resolves.toEqual({ supported: true });
@@ -345,6 +359,20 @@ describe("ApiSetEngine", () => {
       });
       expect(isApiNotFound(bridgeMissingPost.error)).toBe(false);
       await expect(jsonRpcApiProbe("bridge.get_post")(context({}))).rejects.toThrow(TransportError);
+    });
+
+    it("fails the probe on an error that is neither not served nor the API's own", async () => {
+      const answer = (error: JsonRpcResponse["error"]) => context({ [HIVE]: { rpc: { "bridge.get_post": { error: error! } } } });
+      const probe = bridge.probe;
+      await expect(probe(answer({ code: -32603, message: "Internal Error" }))).rejects.toThrow("bridge.get_post: Internal Error");
+      await expect(probe(answer({ code: -32000, message: "backend", data: { name: "TimeoutError" } }))).rejects.toThrow(ProbeFailedError);
+      await expect(probe(answer({ code: -32602, message: "invalid author" }))).resolves.toEqual({ supported: true });
+      await expect(probe(answer({ code: -32000, message: "Assert Exception", data: { name: "assert_exception" } }))).resolves.toEqual({ supported: true });
+
+      const { engine } = setup({ sets: [bridge], stubs: { [HIVE]: { rpc: { "bridge.get_post": { error: { code: -32603, message: "Internal Error" } } } }, [SYNCAD]: syncad() } });
+      await engine.refresh();
+      expect(states(engine.rankings("bridge"))).toEqual({ [SYNCAD]: "eligible", [HIVE]: "down" });
+      expect(engine.bestNode("bridge")).toBe(SYNCAD);
     });
 
     it("reads REST support from the HTTP answer", async () => {
@@ -469,10 +497,82 @@ describe("ApiSetEngine", () => {
         expect(calls).toEqual([`${SYNCAD} bridge.get_post`]);
       });
 
+      it("caps each due time by the engine's timing for the node's state", async () => {
+        const snapshot = (await serverEngine()).snapshot();
+        snapshot.sets.bridge.nodes[SYNCAD].nextProbeInMs = 1e15;
+        snapshot.sets.lite.nodes[HIVE].nextProbeInMs = 1e15;
+        const { engine, calls, clock, stubs } = browserEngine(snapshot);
+        Object.assign(stubs, { [HIVE]: hiveBlog(), [SYNCAD]: syncad() });
+
+        clock.now += 10 * 60_000 - 1;
+        await engine.refresh();
+        expect(calls).toEqual([]);
+        clock.now += 1;
+        await engine.refresh();
+        expect(calls).toEqual([`${HIVE} bridge.get_post`, `${SYNCAD} bridge.get_post`, `${SYNCAD} lite.get_info`]);
+        clock.now += 6 * 60 * 60_000;
+        await engine.refresh();
+        expect(calls).toContain(`${HIVE} lite.get_info`);
+      });
+
+      it("ages an old snapshot's due times and ignores one beyond the max age", async () => {
+        const snapshot = (await serverEngine()).snapshot();
+        const { engine, calls, clock, stubs } = setup({ sets, preferences: sameRank, stubs: {} });
+        Object.assign(stubs, { [HIVE]: hiveBlog(), [SYNCAD]: syncad() });
+        clock.now = snapshot.createdAt + 10 * 60_000 - 1000;
+        expect(engine.hydrateSnapshot(snapshot)).toBe(true);
+        expect(engine.bestNode("lite")).toBe(SYNCAD);
+        await engine.refresh();
+        expect(calls).toEqual([]);
+        clock.now += 1000;
+        await engine.refresh();
+        expect(calls).toHaveLength(3);
+
+        const late = setup({ sets, preferences: sameRank, stubs: {}, timing: { snapshotMaxAgeMs: 60_000 } });
+        late.clock.now = snapshot.createdAt + 60_001;
+        expect(late.engine.hydrateSnapshot(snapshot)).toBe(false);
+        expect(states(late.engine.rankings("lite"))).toEqual({ [HIVE]: "unknown", [SYNCAD]: "unknown" });
+        expect(late.engine.bestNode("lite")).toBe(HIVE);
+        late.clock.now = snapshot.createdAt + 60_000;
+        expect(late.engine.hydrateSnapshot(snapshot)).toBe(true);
+      });
+
+      it("builds a never-probing per-request engine from a shared one and a cookie", async () => {
+        const shared = await serverEngine();
+        const sharedSnapshot = shared.snapshot();
+        const user = setup({ sets, preferences: sameRank, stubs: { [HIVE]: hiveBlog(), [SYNCAD]: syncad(), [CUSTOM]: syncad() } });
+        await user.engine.refresh();
+        user.engine.addNode(CUSTOM);
+        await user.engine.refresh();
+        expect(user.engine.select("lite", CUSTOM)).toBe(true);
+        expect(user.engine.select("bridge", SYNCAD)).toBe(true);
+        const cookie = user.engine.serialize();
+
+        const request = ApiSetEngine.forRequest(shared, cookie);
+        expect(request.nodes()).toEqual([HIVE, SYNCAD, CUSTOM]);
+        expect(request.selection("lite")).toBe(CUSTOM);
+        expect(request.bestNode("lite")).toBe(SYNCAD);
+        expect(request.bestNode("bridge")).toBe(SYNCAD);
+        expect(ranking(request, "lite", CUSTOM)).toMatchObject({ state: "unknown", isSelected: true, isActive: false });
+
+        // The shared engine is untouched: no cookie choice, no custom node.
+        expect(shared.nodes()).toEqual([HIVE, SYNCAD]);
+        expect(shared.selection("bridge")).toBe("auto");
+        expect(shared.snapshot()).toEqual(sharedSnapshot);
+
+        // Even when refreshed by mistake, it fetches nothing.
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+        await request.refresh();
+        expect(fetchSpy).not.toHaveBeenCalled();
+        fetchSpy.mockRestore();
+        expect(ApiSetEngine.forRequest(shared).bestNode("bridge")).toBe(HIVE);
+      });
+
       it("refuses an unreadable snapshot and drops malformed nodes", async () => {
         const { engine } = setup();
         expect(engine.hydrateSnapshot({ v: 2, sets: {} })).toBe(false);
         expect(engine.hydrateSnapshot("v=1")).toBe(false);
+        expect(engine.hydrateSnapshot({ v: 1, sets: {} })).toBe(false);
         const snapshot = (await serverEngine()).snapshot();
         const nodes = snapshot.sets.lite.nodes as Record<string, unknown>;
         nodes[HIVE] = { ...snapshot.sets.lite.nodes[HIVE], state: "great" };
