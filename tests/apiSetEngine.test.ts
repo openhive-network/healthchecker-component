@@ -328,7 +328,19 @@ describe("ApiSetEngine", () => {
       expect(engine.addNode("https://user@other.example")).toBe(false);
       expect(engine.hydrate(`v=1&c=${encodeURIComponent("https://user:secret@other.example")}`)).toBe(true);
       expect(engine.nodes()).toEqual([HIVE, SYNCAD]);
-      expect(() => setup({ nodes: [HIVE, "https://user:secret@api.syncad.com"] })).toThrow(TypeError);
+    });
+
+    it("refuses user info in the catalog and in preferences, naming the reason but not the secret", () => {
+      const userInfo = "https://user:secret@api.syncad.com/";
+      const error = /^Node URLs must not contain user info: https:\/\/api\.syncad\.com\/$/;
+      expect(() => setup({ nodes: [HIVE, userInfo] })).toThrow(TypeError);
+      expect(() => setup({ nodes: [HIVE, userInfo] })).toThrow(error);
+      expect(() => setup({ preferences: { bridge: [userInfo, HIVE] } })).toThrow(TypeError);
+      expect(() => setup({ preferences: { bridge: [userInfo, HIVE] } })).toThrow(error);
+      expect(() => setup({ preferences: { bridge: [[HIVE, "https://user@api.syncad.com"]] } })).toThrow(
+        "Node URLs must not contain user info: https://api.syncad.com/",
+      );
+      expect(() => setup({ preferences: { bridge: ["wss://api.hive.blog"] } })).toThrow("Not an http(s) node URL: wss://api.hive.blog");
     });
   });
 
@@ -528,7 +540,7 @@ describe("ApiSetEngine", () => {
         await engine.refresh();
         expect(calls).toHaveLength(3);
 
-        const late = setup({ sets, preferences: sameRank, stubs: {}, timing: { snapshotMaxAgeMs: 60_000 } });
+        const late = setup({ sets, preferences: sameRank, stubs: {}, timing: { snapshotMaxAgeMs: 60_000, snapshotClockSkewMs: 0 } });
         late.clock.now = snapshot.createdAt + 60_001;
         expect(late.engine.hydrateSnapshot(snapshot)).toBe(false);
         expect(states(late.engine.rankings("lite"))).toEqual({ [HIVE]: "unknown", [SYNCAD]: "unknown" });
@@ -566,6 +578,99 @@ describe("ApiSetEngine", () => {
         expect(fetchSpy).not.toHaveBeenCalled();
         fetchSpy.mockRestore();
         expect(ApiSetEngine.forRequest(shared).bestNode("bridge")).toBe(HIVE);
+      });
+
+      it("never probes, checks or calls the sets' functions on a per-request engine, even when started", async () => {
+        const probe = vi.fn(bridge.probe);
+        const lag = vi.fn(async () => 0);
+        const createHealthChecker = vi.fn(() => new wax.FakeHealthChecker() as never);
+        const watched: ApiSet[] = [
+          { ...bridge, probe, freshness: { lag, maxLag: 10 } },
+          { ...lite, group: undefined, checks: [{ title: "Info", method: {}, params: {}, validatorFunction: () => true }] },
+        ];
+        const shared = setup({ sets: watched, preferences: sameRank, createHealthChecker });
+        await shared.engine.refresh();
+        expect(shared.engine.bestNode("lite")).toBe(SYNCAD);
+        probe.mockClear();
+        lag.mockClear();
+        shared.calls.length = 0;
+        wax.FakeHealthChecker.instances = [];
+
+        const request = ApiSetEngine.forRequest(shared.engine, `v=1&c=${encodeURIComponent(CUSTOM)}`);
+        const fetchSpy = vi.spyOn(globalThis, "fetch");
+        // Every node is due for its probe and freshness check.
+        shared.clock.now += 24 * 60 * 60_000;
+        await request.start();
+        await request.refresh();
+        expect(request.addNode(OPENHIVE)).toBe(true);
+        await request.refresh();
+        request.stop();
+        expect(fetchSpy).not.toHaveBeenCalled();
+        fetchSpy.mockRestore();
+
+        expect(shared.calls).toEqual([]);
+        expect(probe).not.toHaveBeenCalled();
+        expect(lag).not.toHaveBeenCalled();
+        expect(createHealthChecker).not.toHaveBeenCalled();
+        expect(wax.FakeHealthChecker.instances).toEqual([]);
+        expect(request.bestNode("bridge")).toBe(shared.engine.bestNode("bridge"));
+        expect(request.bestNode("lite")).toBe(SYNCAD);
+        expect(states(request.rankings("lite"))).toEqual({ [HIVE]: "unsupported", [SYNCAD]: "eligible", [CUSTOM]: "unknown", [OPENHIVE]: "unknown" });
+      });
+
+      describe("with the browser's clock off the server's by 45 min", () => {
+        const SKEW = 45 * 60_000;
+        const skewed = (snapshot: unknown, offsetMs: number, timing: ApiSetEngineOptions["timing"] = {}) => {
+          const browser = setup({ sets, preferences: sameRank, stubs: {}, timing });
+          browser.clock.now = (snapshot as { createdAt: number }).createdAt + offsetMs;
+          return browser;
+        };
+
+        it("takes a fresh snapshot exactly with a measured clock offset", async () => {
+          const server = await serverEngine();
+          const snapshot = JSON.parse(JSON.stringify(server.snapshot()));
+          for (const offset of [SKEW, -SKEW]) {
+            const { engine, calls, clock, stubs } = skewed(snapshot, offset);
+            expect(engine.hydrateSnapshot(snapshot, { clockOffsetMs: -offset })).toBe(true);
+            for (const { id } of server.sets()) expect(engine.bestNode(id)).toBe(server.bestNode(id));
+            Object.assign(stubs, { [HIVE]: hiveBlog(), [SYNCAD]: syncad() });
+            await engine.refresh();
+            expect(calls).toEqual([]);
+            // Due as on the server: eligible nodes after `eligibleRecheckMs`, not at once nor never.
+            clock.now += 10 * 60_000;
+            await engine.refresh();
+            expect(calls).toContain(`${SYNCAD} bridge.get_post`);
+          }
+        });
+
+        it("ages a cached snapshot by the server's clock with a measured offset, even with the browser behind", async () => {
+          const snapshot = (await serverEngine()).snapshot();
+          // Served from a cache 40 min after it was taken, to a browser 45 min behind the server.
+          const { engine } = skewed(snapshot, 40 * 60_000 - SKEW);
+          expect(engine.hydrateSnapshot(snapshot, { clockOffsetMs: SKEW })).toBe(false);
+          expect(states(engine.rankings("lite"))).toEqual({ [HIVE]: "unknown", [SYNCAD]: "unknown" });
+          expect(() => engine.hydrateSnapshot(snapshot, { clockOffsetMs: Number.NaN })).toThrow(RangeError);
+        });
+
+        it("without an offset, counts a snapshot from the future as new and allows `snapshotClockSkewMs` ahead", async () => {
+          const server = await serverEngine();
+          const snapshot = server.snapshot();
+
+          const behind = skewed(snapshot, -SKEW);
+          expect(behind.engine.hydrateSnapshot(snapshot)).toBe(true);
+          expect(behind.engine.bestNode("lite")).toBe(server.bestNode("lite"));
+          Object.assign(behind.stubs, { [HIVE]: hiveBlog(), [SYNCAD]: syncad() });
+          await behind.engine.refresh();
+          expect(behind.calls).toEqual([]);
+
+          // The default 5 min allowance does not cover 45 min ahead; a configured one does.
+          expect(skewed(snapshot, SKEW).engine.hydrateSnapshot(snapshot)).toBe(false);
+          const ahead = skewed(snapshot, SKEW, { snapshotClockSkewMs: 20 * 60_000 });
+          expect(ahead.engine.hydrateSnapshot(snapshot)).toBe(true);
+          for (const { id } of server.sets()) expect(ahead.engine.bestNode(id)).toBe(server.bestNode(id));
+          expect(skewed(snapshot, 35 * 60_000).engine.hydrateSnapshot(snapshot)).toBe(true);
+          expect(skewed(snapshot, 35 * 60_000 + 1).engine.hydrateSnapshot(snapshot)).toBe(false);
+        });
       });
 
       it("refuses an unreadable snapshot and drops malformed nodes", async () => {
