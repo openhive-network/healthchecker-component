@@ -5,7 +5,7 @@ import { parseSelection, serializeSelection } from "./selection";
 import { readSnapshot } from "./snapshot";
 import { NodeStats } from "./stats";
 import { memoryStorage, SelectionStorage } from "./storage";
-import { ApiTransport, fetchTransport } from "./transport";
+import { ApiTransport, fetchTransport, TransportError } from "./transport";
 import type {
   ApiSet,
   ApiSetEngineEvents,
@@ -26,6 +26,7 @@ const DEFAULT_TIMING: EngineTiming = {
   unsupportedTtlMs: 6 * 60 * 60_000,
   freshnessIntervalMs: 60_000,
   tickMs: 15_000,
+  snapshotMaxAgeMs: 30 * 60_000,
 };
 // An error rate from fewer outcomes than this says nothing yet.
 const MIN_OUTCOMES_FOR_ERROR_RATE = 4;
@@ -45,6 +46,16 @@ interface NodeEntry {
   stats: NodeStats;
 }
 
+// The transport of a `forRequest` engine: it must never fetch, least of all a cookie's custom node.
+const noProbeTransport: ApiTransport = {
+  jsonRpc: async (node) => {
+    throw new TransportError(`${node}: a per-request engine does not probe`);
+  },
+  restGet: async (node) => {
+    throw new TransportError(`${node}: a per-request engine does not probe`);
+  },
+};
+
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
@@ -53,6 +64,7 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
  * Active probing and wax health checks run between `start()` and `stop()`; `refresh()` runs one round.
  */
 export class ApiSetEngine extends EventTarget {
+  private readonly options: ApiSetEngineOptions;
   private readonly catalog: string[];
   private readonly setsById: Map<string, ApiSet>;
   private readonly tiers: Map<string, Map<string, number>>;
@@ -78,6 +90,7 @@ export class ApiSetEngine extends EventTarget {
 
   constructor(options: ApiSetEngineOptions) {
     super();
+    this.options = options;
     this.catalog = [
       ...new Set(
         options.nodes.map((node) => {
@@ -107,6 +120,21 @@ export class ApiSetEngine extends EventTarget {
     for (const node of this.catalog) this.track(node);
     const saved = this.storage.load();
     if (!saved || !this.restore(saved)) this.recompute();
+  }
+
+  /**
+   * A fresh engine for one server-side request: `shared`'s options and node health (its
+   * {@link snapshot}), and the user's `cookieState` ({@link serialize}d), kept in memory. It never probes:
+   * its transport refuses every call, so a cookie's custom node is never fetched by the server. Such a
+   * node has no health in `shared`'s snapshot, so a choice of it uses `auto` until a browser engine probes
+   * it. `shared` is the process's long-lived engine probing the operator catalog only; never `hydrate` a
+   * cookie into it or add a cookie's node to it.
+   */
+  static forRequest(shared: ApiSetEngine, cookieState?: string): ApiSetEngine {
+    const engine = new ApiSetEngine({ ...shared.options, transport: noProbeTransport, storage: memoryStorage() });
+    if (cookieState !== undefined) engine.hydrate(cookieState);
+    engine.hydrateSnapshot(shared.snapshot());
+    return engine;
   }
 
   // Events
@@ -296,18 +324,23 @@ export class ApiSetEngine extends EventTarget {
       }
       sets[setId] = { default: this.defaults.get(setId), nodes };
     }
-    return { v: 1, sets };
+    return { v: 1, createdAt: now, sets };
   }
 
   /**
    * Takes over a {@link snapshot} (e.g. a server engine's, read from the page), for the sets and nodes
    * this engine knows; restore the user's custom nodes with {@link hydrate} first. Nodes are probed again
-   * when the snapshot says they are due. Returns false for an unreadable snapshot.
+   * when the snapshot says they are due, at the latest when this engine's timing for their state says so,
+   * counted from the snapshot's creation. Returns false (and takes nothing) for an unreadable snapshot, or
+   * one older than `timing.snapshotMaxAgeMs`.
    */
   hydrateSnapshot(snapshot: unknown): boolean {
     const parsed = readSnapshot(snapshot);
     if (!parsed) return false;
     const now = this.now();
+    // A snapshot "from the future" is clock skew between server and browser, not a reason to trust it longer.
+    const age = Math.max(0, now - parsed.createdAt);
+    if (age > this.timing.snapshotMaxAgeMs) return false;
     for (const [setId, { default: defaultNode, nodes }] of Object.entries(parsed.sets)) {
       const entries = this.entries.get(setId);
       if (!entries) continue;
@@ -320,9 +353,9 @@ export class ApiSetEngine extends EventTarget {
         entry.invalidData = saved.invalidData;
         entry.stats.restore(saved);
         entry.freshnessLag = saved.freshnessLag;
-        entry.freshnessCheckedAt = saved.freshnessLag === undefined ? undefined : now;
+        entry.freshnessCheckedAt = saved.freshnessLag === undefined ? undefined : now - age;
         entry.lastProbeAt = saved.lastProbeAt;
-        entry.nextProbeAt = now + saved.nextProbeInMs;
+        entry.nextProbeAt = now + Math.max(0, Math.min(saved.nextProbeInMs, this.recheckMs(saved.state)) - age);
         entry.generation += 1;
       }
       const url = defaultNode === undefined ? undefined : canonicalNodeUrl(defaultNode);
@@ -452,6 +485,20 @@ export class ApiSetEngine extends EventTarget {
       entry.reason = `freshness unknown: ${errorMessage(error)}`;
     }
     entry.freshnessCheckedAt = this.now();
+  }
+
+  /** The longest a node in `state` waits for its next probe. */
+  private recheckMs(state: NodeState): number {
+    switch (state) {
+      case "eligible":
+        return this.timing.eligibleRecheckMs;
+      case "unsupported":
+        return this.timing.unsupportedTtlMs;
+      case "down":
+        return this.timing.downCooldownMs;
+      case "unknown":
+        return 0;
+    }
   }
 
   private setState(entry: NodeEntry, state: NodeState, reason: string | undefined, recheckMs: number) {

@@ -1,4 +1,4 @@
-import { ApiTransport, isApiNotFound } from "./transport";
+import { ApiTransport, isApiNotFound, JsonRpcError } from "./transport";
 
 export type ProbeResult = { supported: true; features?: string[] } | { supported: false; reason: string };
 
@@ -68,13 +68,26 @@ export const restProbe = <T = unknown>(path: string, features?: (body: T) => str
     return { supported: true, features: features?.(body as T) };
   };
 
+const JSON_RPC_INVALID_PARAMS = -32602;
+// fc's exception names (`assert_exception`, …): hived's and hivemind's own errors, not a router's.
+const API_EXCEPTION = /_exception$/;
+
+/** An error raised by the API itself (bad arguments, a failed assert), which only a node serving it gives. */
+const isApiError = ({ code, data }: JsonRpcError) => {
+  const name = (data as { name?: unknown } | null | undefined)?.name;
+  return code === JSON_RPC_INVALID_PARAMS || (typeof name === "string" && API_EXCEPTION.test(name));
+};
+
 /**
- * Supported unless the node says it does not serve the API (see `isApiNotFound`). Any other answer of
- * `method`, a result or the API's own error (bad arguments, a failed assert such as "Post … does not
- * exist"), shows the API is there; so `method` should be cheap, e.g. `bridge.get_post` of a post that
- * does not exist.
+ * Supported when `method` answers with a result or the API's own error (bad arguments, `-32602`, or an
+ * fc exception such as a failed assert: "Post … does not exist"); unsupported when the node says it does
+ * not serve the API (see `isApiNotFound`). Any other error (e.g. a router's `-32603` "Internal Error")
+ * fails the probe. So `method` should be cheap, e.g. `bridge.get_post` of a post that does not exist.
  */
 export const jsonRpcApiProbe = (method: string, params: unknown = {}): ApiProbe => async ({ node, transport, timeoutMs }) => {
   const response = await transport.jsonRpc(node, method, params, timeoutMs);
-  return response.error && isApiNotFound(response.error) ? { supported: false, reason: response.error.message } : { supported: true };
+  if (!response.error) return { supported: true };
+  if (isApiNotFound(response.error)) return { supported: false, reason: response.error.message };
+  if (isApiError(response.error)) return { supported: true };
+  throw new ProbeFailedError(`${method}: ${response.error.message}`);
 };

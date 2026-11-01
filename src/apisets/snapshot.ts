@@ -44,10 +44,10 @@ const readNode = (value: unknown): NodeSnapshot | undefined => {
 
 /**
  * Reads an {@link ApiSetSnapshot} that crossed a process boundary (e.g. JSON in a server-rendered page).
- * Returns `undefined` for another version or shape; drops malformed node entries.
+ * Returns `undefined` for another version or shape, or without a creation time; drops malformed node entries.
  */
 export const readSnapshot = (value: unknown): ApiSetSnapshot | undefined => {
-  if (!isRecord(value) || value.v !== 1 || !isRecord(value.sets)) return undefined;
+  if (!isRecord(value) || value.v !== 1 || !isMs(value.createdAt) || !isRecord(value.sets)) return undefined;
   const sets: ApiSetSnapshot["sets"] = {};
   for (const [setId, set] of Object.entries(value.sets)) {
     if (!isRecord(set) || !isRecord(set.nodes) || !optional(set.default, isString)) continue;
@@ -58,5 +58,5 @@ export const readSnapshot = (value: unknown): ApiSetSnapshot | undefined => {
     }
     sets[setId] = { default: set.default, nodes };
   }
-  return { v: 1, sets };
+  return { v: 1, createdAt: value.createdAt, sets };
 };
