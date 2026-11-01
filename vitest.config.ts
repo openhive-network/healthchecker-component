@@ -35,6 +35,9 @@ export default defineConfig({
   resolve: { mainFields: ["module", "main"] },
   test: {
     environment: "jsdom",
+    // One fork per file and project, as many as the host has cores, outgrows the suites' 3.2 GB
+    // memory cap on a 48-core host (peak 3.36 GB with 8 files); 4 forks peak at 1.4 GB and run faster.
+    maxWorkers: 4,
     include: ["tests/**/*.test.{ts,tsx}"],
     setupFiles: ["tests/setup.ts"],
     // Node resolves `react` from an external dependency's own location, past the alias, so
