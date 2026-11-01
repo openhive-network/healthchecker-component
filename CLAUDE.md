@@ -26,6 +26,15 @@ Published as `@hiveio/healthchecker-component` to GitLab package registry and np
 ```
 src/
 ├── index.ts                     # Main entry, exports public API
+├── apisets/                     # Headless API-set engine (no React, no window)
+│   ├── ApiSetEngine.ts          # Per-set eligibility, defaults, rankings, user choice
+│   ├── defaults.ts              # Pure, deterministic default-node choice (preference, stickiness, groups)
+│   ├── probes.ts                # Capability probes: JSON-RPC namespace/method, REST path
+│   ├── transport.ts             # ApiTransport (fetch by default), TransportError, isApiNotFound
+│   ├── selection.ts             # Cookie-safe serialize/parse of the user's choices
+│   ├── storage.ts               # SelectionStorage adapters (memory, localStorage)
+│   ├── stats.ts                 # Rolling latency/outcome samples
+│   └── types.ts                 # ApiSet, NodeRanking, options and events
 └── components/healthchecker/
     ├── healthchecker.tsx        # Main component (~300 lines)
     ├── HealthCheckerService.ts  # Service class, state management (~290 lines)
@@ -33,6 +42,8 @@ src/
     ├── ProviderAddition.tsx     # Add custom provider form
     ├── ValidationErrorDialog.tsx # Error detail modal
     ├── ConfirmationSwitchDialog.tsx # Provider switch confirmation
+    ├── ApiSetsComponent.tsx     # Renders an ApiSetEngine, one tab per API set
+    ├── ApiSetNodeCard.tsx       # One node of a set's ranking
     ├── utils.ts                 # cn() classname utility
     ├── index.ts                 # Component exports
     └── shad/                    # shadcn/ui implementations
@@ -59,7 +70,7 @@ pnpm install         # Install dependencies
 pnpm dev             # Start Vite dev server with HMR
 pnpm build           # TypeScript check + Vite library build (outputs to dist/)
 pnpm lint            # Run ESLint (max-warnings 0)
-pnpm test            # Render tests (tests/) under React 18 and 19
+pnpm test            # Engine (Node) and render tests (tests/) under React 18 and 19
 pnpm preview         # Preview production build
 ```
 
@@ -82,6 +93,7 @@ pnpm preview         # Preview production build
 **Architecture:**
 - `HealthCheckerComponent` - React FC managing UI state, subscribes to service events
 - `HealthCheckerService` - EventTarget-based class, manages health checker, emits state changes
+- `ApiSetEngine` - framework-free EventTarget: per API set, which nodes serve it (probe), the default node (operator preference, then latency, stickiness, soft groups, freshness), rankings and the user's choice. Must not touch `window` at import or construction (storage goes through a `SelectionStorage` adapter); tests in `tests/apiSetEngine.test.ts` run it under Node. `ApiSetsComponent` renders one. See README "API sets".
 
 **TypeScript:**
 - Interface-based props (`HealthCheckerComponentProps`, etc.)
