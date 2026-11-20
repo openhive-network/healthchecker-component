@@ -96,6 +96,38 @@ browserEngine.hydrateSnapshot(health);
 <ApiSetsComponent engine={engine} />
 ```
 
+* **Translating the panel.** `ApiSetsComponent` takes its text as `labels` (type `ApiSetsLabels`); a key left out keeps its English, so without `labels` the panel renders as before. A text with a value is one template with `{{name}}` placeholders, filled in by the component, so a translation can put the value where its language needs it. `setTitles` maps a set id to the title to show (tabs, the fallback notice and the group notice, which names sets by id otherwise), leaving the engine config's `id` and `title` as they are. A node's `reason` is the probe's or the node's own diagnostic (e.g. `Unable to map request to endpoint.`) and is shown verbatim. Type a complete translation as `ApiSetsLabels` to have the compiler report a missing key.
+
+```tsx
+<ApiSetsComponent
+  engine={engine}
+  setTitles={{ bridge: t("apiSets.bridge"), lite: t("apiSets.lite") }}
+  labels={{ heading: t("apiSets.heading"), median: t("apiSets.median"), /* … */ }}
+/>
+```
+
+| Key | English | Placeholders |
+|-----|---------|--------------|
+| `heading` | API servers by API set | |
+| `automaticChoice` | Automatic choice | |
+| `yourChoiceOf` | Your choice: {{node}} | `node` |
+| `useAutomaticChoice` | Use automatic choice | |
+| `fallbackNotice` | {{selected}} is unavailable for {{set}}; using {{node}} until it recovers. | `selected`, `set` (title), `node` (or `noNode`) |
+| `noNode` | no node | |
+| `groupSplit` | No single node serves all of {{sets}}: {{nodes}}. | `sets`, `nodes` (one `groupSplitSet` per set), each joined by `listSeparator` |
+| `groupSplitSet` | {{set}} uses {{node}} | `set`, `node` (or `noNode`) |
+| `listSeparator` | `, ` | |
+| `stateEligible`, `stateUnsupported`, `stateDown`, `stateUnknown`, `stateDegraded` | eligible, unsupported, down, unknown, degraded | |
+| `defaultBadge`, `yourChoiceBadge`, `inUse` | Default, Your choice, In use | |
+| `median`, `p95` | Median: {{value}}, p95: {{value}} | `value` (`milliseconds` or `noValue`) |
+| `errors` | Errors: {{value}}% | `value` (whole percent) |
+| `lag` | Lag: {{value}} | `value` |
+| `milliseconds` | {{value}} ms | `value` |
+| `noValue` | – | |
+| `use`, `useEverywhere` | Use, Use for everything it serves | |
+| `removeNode` | Remove {{node}} (the remove button's accessible name) | `node` |
+| `addNodeTitle`, `addNodeHint`, `addNodePlaceholder`, `addNodeButton`, `addNodeInvalidUrl` | the custom-node form: Add Custom Node:, Enter a custom Hive node URL., (e.g., https://example.com), Add, Please enter a valid URL (must start with http:// or https://) | |
+
 * **Probes.** `jsonRpcApiProbe(method, params)` calls a cheap method of the API: a result, or the API's own error (bad arguments, -32602, or an fc exception such as a failed `assert_exception`), counts as served; "not served" (`isApiNotFound`: JSON-RPC -32601, hived's `Could not find API`, the router's `Unable to map request to endpoint.`, PostgREST's PGRST202) as unsupported; any other error (e.g. a router's -32603 `Internal Error`) is a failed probe, toward `down`. `jsonRpcMethodProbe` also reads features from the result and treats other errors as a failed probe. `jsonRpcNamespaceProbe` reads `jsonrpc.get_methods`, which lists only hived's own namespaces (`database_api`, `rc_api`, …): never use it for `bridge`, `hive`, `lite` or `hivesense_api`, which other apps serve behind the router. `restProbe(path)` GETs a REST API's root: 404 (or PGRST202) is unsupported; 502/503, a route with no backend behind it, is a failed probe (`NoBackendError`) until it repeats on `downAfterFailures` probes in a row on a node eligible for another set, and then unsupported, probed again after `timing.noBackendRecheckMs` (1 h by default); other 5xx and timeouts are failed probes, toward `down`, so a node failing everything stays `down`. `fetchTransport` reads the body of a non-2xx JSON-RPC answer: a JSON-RPC error (e.g. the router's HTTP 404 `Unable to map request to endpoint.`) is classified as above, any other HTTP 404 to a JSON-RPC call is "not served", and any other non-2xx (e.g. 500 `{"message":"Internal Server Error"}`) is a failed probe.
 * **Node URLs.** Catalog, preferences, `addNode`, `select`, `report` and hydrated state are normalized (scheme and host case, default port, trailing slash, empty query, fragment), so `https://API.syncad.com/?` and `https://api.syncad.com` are one node. A URL with user info (`https://user:pass@…`) is not a node URL: it would end up in cookies and rankings. In the catalog or `preferences` the constructor throws a `TypeError` for it ("Node URLs must not contain user info"), as for any non-http(s) URL there; `addNode` and hydrated state drop it.
 * **States.** Per node and set: `eligible`, `unsupported` (the probe said no; trusted for `timing.unsupportedTtlMs`, 6 h by default, or `timing.noBackendRecheckMs` for a REST route with no backend), `down` (the probe could not answer, or `downAfterFailures` transport errors in a row; probed again after `timing.downCooldownMs`) or `unknown` (not probed yet). A set's `checks` (the `ApiChecker` shape) run in wax's `HealthChecker` against its eligible nodes for latency and errors.
