@@ -47,6 +47,7 @@ src/
     ├── ConfirmationSwitchDialog.tsx # Provider switch confirmation
     ├── ApiSetsComponent.tsx     # Renders an ApiSetEngine, one tab per API set
     ├── ApiSetNodeCard.tsx       # One node of a set's ranking
+    ├── labels.ts                # ApiSetsComponent text: English defaults, {{name}} templates
     ├── utils.ts                 # cn() classname utility
     ├── index.ts                 # Component exports
     └── shad/                    # shadcn/ui implementations

@@ -1,9 +1,11 @@
 import { Input } from "./shad/input";
 import { useState } from "react";
 import { Button } from "./shad/button";
+import { DEFAULT_PROVIDER_ADDITION_LABELS, type ProviderAdditionLabels } from "./labels";
 
 interface ProviderAdditionProps {
   onProviderSubmit: (provider: string) => void;
+  labels?: ProviderAdditionLabels;
 }
 
 const isValidUrl = (url: string): boolean => {
@@ -20,15 +22,14 @@ const isValidUrl = (url: string): boolean => {
 
 const ProviderAddition: React.FC<ProviderAdditionProps> = ({
   onProviderSubmit,
+  labels = DEFAULT_PROVIDER_ADDITION_LABELS,
 }) => {
   const [providerValue, setProviderValue] = useState<string>("");
   const [error, setError] = useState("");
 
   const onSubmit = (providerValue: string) => {
     if (!isValidUrl(providerValue)) {
-      setError(
-        "Please enter a valid URL (must start with http:// or https://)"
-      );
+      setError(labels.addNodeInvalidUrl);
       return;
     }
     setError("");
@@ -38,8 +39,8 @@ const ProviderAddition: React.FC<ProviderAdditionProps> = ({
 
   return (
     <div className="flex flex-col justify left">
-      <div className="font-semibold">Add Custom Node:</div>
-      <div className="text-sm mb-2">Enter a custom Hive node URL.</div>
+      <div className="font-semibold">{labels.addNodeTitle}</div>
+      <div className="text-sm mb-2">{labels.addNodeHint}</div>
       <div className="flex w-ful">
         <Input
           value={providerValue}
@@ -47,7 +48,7 @@ const ProviderAddition: React.FC<ProviderAdditionProps> = ({
           className="focus:bg-white dark:focus:bg-gray-700"
           type="url"
           data-testid="api-address-input"
-          placeholder="(e.g., https://example.com)"
+          placeholder={labels.addNodePlaceholder}
           onChange={(e) => setProviderValue(e.target.value)}
         />
         <Button
@@ -57,7 +58,7 @@ const ProviderAddition: React.FC<ProviderAdditionProps> = ({
             onSubmit(providerValue);
           }}
         >
-          Add
+          {labels.addNodeButton}
         </Button>
       </div>
       {error ? <div className="flex text-red-500">{error}</div> : null}

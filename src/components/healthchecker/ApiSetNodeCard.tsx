@@ -3,7 +3,8 @@ import { cn } from "./utils.ts";
 import { Button } from "./shad/button";
 import { Card } from "./shad/card";
 import { Badge } from "./shad/badge";
-import type { NodeRanking } from "../../apisets";
+import { formatLabel, type ApiSetsLabels } from "./labels";
+import type { NodeRanking, NodeState } from "../../apisets";
 
 interface ApiSetNodeCardProps {
   ranking: NodeRanking;
@@ -11,6 +12,7 @@ interface ApiSetNodeCardProps {
   onSelect: (node: string) => void;
   onSelectEverywhere: (node: string) => void;
   onRemove: (node: string) => void;
+  labels: ApiSetsLabels;
 }
 
 const STATE_CLASSES: Record<NodeRanking["state"], string> = {
@@ -20,9 +22,17 @@ const STATE_CLASSES: Record<NodeRanking["state"], string> = {
   unknown: "border-gray-400 text-gray-500",
 };
 
-const formatMs = (ms?: number) => (ms === undefined ? "–" : `${Math.round(ms)} ms`);
+const STATE_LABELS: Record<NodeState, keyof ApiSetsLabels> = {
+  eligible: "stateEligible",
+  unsupported: "stateUnsupported",
+  down: "stateDown",
+  unknown: "stateUnknown",
+};
 
-const ApiSetNodeCard: React.FC<ApiSetNodeCardProps> = ({ ranking, index, onSelect, onSelectEverywhere, onRemove }) => {
+const formatMs = (labels: ApiSetsLabels, ms?: number) =>
+  ms === undefined ? labels.noValue : formatLabel(labels.milliseconds, { value: Math.round(ms) });
+
+const ApiSetNodeCard: React.FC<ApiSetNodeCardProps> = ({ ranking, index, onSelect, onSelectEverywhere, onRemove, labels }) => {
   const { node, state, reason, features, degraded, isDefault, isSelected, isActive, isCustom } = ranking;
   return (
     <Card
@@ -33,7 +43,7 @@ const ApiSetNodeCard: React.FC<ApiSetNodeCardProps> = ({ ranking, index, onSelec
     >
       {isCustom && !isSelected && (
         <div className="absolute top-0 right-2">
-          <Button className="p-1 rounded-sm" onClick={() => onRemove(node)} variant="ghost" aria-label={`Remove ${node}`}>
+          <Button className="p-1 rounded-sm" onClick={() => onRemove(node)} variant="ghost" aria-label={formatLabel(labels.removeNode, { node })}>
             <X className="w-4 h-4 dark:text-white" />
           </Button>
         </div>
@@ -42,19 +52,19 @@ const ApiSetNodeCard: React.FC<ApiSetNodeCardProps> = ({ ranking, index, onSelec
         <p>{index}</p>
         <p data-testid="hc-set-node-url">{node}</p>
         <Badge variant="outline" className={STATE_CLASSES[state]} data-testid="hc-set-node-state">
-          {degraded ? "degraded" : state}
+          {degraded ? labels.stateDegraded : labels[STATE_LABELS[state]]}
         </Badge>
-        {isDefault && <Badge variant="secondary">Default</Badge>}
-        {isSelected && <Badge variant="secondary">Your choice</Badge>}
-        {isActive && <span className="text-green-600" data-testid="hc-set-node-active">In use</span>}
+        {isDefault && <Badge variant="secondary">{labels.defaultBadge}</Badge>}
+        {isSelected && <Badge variant="secondary">{labels.yourChoiceBadge}</Badge>}
+        {isActive && <span className="text-green-600" data-testid="hc-set-node-active">{labels.inUse}</span>}
       </div>
       {reason && <p className="text-xs text-gray-500 dark:text-gray-400">{reason}</p>}
       {state === "eligible" && (
         <div className="flex flex-wrap gap-4 text-sm">
-          <span>Median: {formatMs(ranking.medianLatencyMs)}</span>
-          <span>p95: {formatMs(ranking.p95LatencyMs)}</span>
-          {ranking.errorRate !== undefined && <span>Errors: {Math.round(ranking.errorRate * 100)}%</span>}
-          {ranking.freshnessLag !== undefined && <span>Lag: {ranking.freshnessLag}</span>}
+          <span>{formatLabel(labels.median, { value: formatMs(labels, ranking.medianLatencyMs) })}</span>
+          <span>{formatLabel(labels.p95, { value: formatMs(labels, ranking.p95LatencyMs) })}</span>
+          {ranking.errorRate !== undefined && <span>{formatLabel(labels.errors, { value: Math.round(ranking.errorRate * 100) })}</span>}
+          {ranking.freshnessLag !== undefined && <span>{formatLabel(labels.lag, { value: ranking.freshnessLag })}</span>}
         </div>
       )}
       {!!features?.length && (
@@ -70,11 +80,11 @@ const ApiSetNodeCard: React.FC<ApiSetNodeCardProps> = ({ ranking, index, onSelec
         <div className="flex flex-wrap gap-2">
           {!isSelected && (
             <Button className="rounded-sm" onClick={() => onSelect(node)} data-testid="hc-set-node-use">
-              Use
+              {labels.use}
             </Button>
           )}
           <Button variant="outline" className="rounded-sm" onClick={() => onSelectEverywhere(node)}>
-            Use for everything it serves
+            {labels.useEverywhere}
           </Button>
         </div>
       )}
